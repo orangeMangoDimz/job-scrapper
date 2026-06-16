@@ -13,13 +13,13 @@ keywords:
 
 limit: 3
 concurrency: 2
-output_dir: output
 
 # socks5://host:port or http://host:port — comment out for direct connection
 proxy: "socks5://localhost:1080"
 
 bot:
   schedule: "0 11 * * *"
+  model: claude-haiku-4-5-20251001
   max_chars: 1900
   message_template: |
     ## {title}
@@ -36,6 +36,14 @@ bot:
 
 # jobs older than this are dropped; pair with URL param windows per site
 max_age_hours: 72
+
+# network tuning (seconds unless suffixed _ms); all optional — omitted keys use defaults
+timeouts:
+  http_seconds: 30
+  playwright_goto_ms: 60000
+  playwright_networkidle_ms: 15000
+  playwright_settle_seconds: 2
+  indeed_api_seconds: 30
 
 filter:
   location: [jakarta, tangerang, tangerang selatan, bandung, bekasi, Indonesia]

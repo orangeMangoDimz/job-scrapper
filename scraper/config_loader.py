@@ -1,11 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
 import yaml
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
+from .config import FetchTuning
+from .log import get_logger
 from .types import CANONICAL_FIELDS, MANDATORY_FIELDS
 
 DEFAULT_FIELDS: tuple[str, ...] = ("title", "company", "location", "url")
@@ -32,13 +42,14 @@ class ConfigError(ValueError):
     pass
 
 
-@dataclass(frozen=True)
-class ProxyConfig:
+class ProxyConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
     url: str
 
 
-@dataclass(frozen=True)
-class SiteConfig:
+class SiteConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     name: str
     enabled: bool
     url_template: str
@@ -47,6 +58,12 @@ class SiteConfig:
     filter: dict[str, list[str]] | None = None
     limit: int | None = None
 
+    @field_validator("url_template")
+    @classmethod
+    def _check_host(cls, v: str, info: ValidationInfo) -> str:
+        _validate_url_host(info.data.get("name", "?"), v)
+        return v
+
     def effective_fields(self, default: tuple[str, ...]) -> tuple[str, ...]:
         return self.fields if self.fields is not None else default
 
@@ -54,17 +71,106 @@ class SiteConfig:
         return _resolve_url(self.name, self.url_template, _build_template_vars(keyword))
 
 
-@dataclass(frozen=True)
-class AppConfig:
+class AppConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     keywords: tuple[str, ...]
     limit: int
     concurrency: int
-    output_dir: Path
     default_fields: tuple[str, ...]
     max_age_hours: int | None
     filter: dict[str, list[str]]
     sites: tuple[SiteConfig, ...]
     proxy: ProxyConfig | None = None
+    timeouts: FetchTuning = Field(default_factory=FetchTuning)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_raw(cls, raw: object) -> dict:
+        if not isinstance(raw, dict):
+            raise ConfigError(f"config root must be a mapping, got {type(raw).__name__}")
+        keywords = _resolve_keywords(raw)
+        sites_raw = raw.get("sites")
+        if not isinstance(sites_raw, dict) or not sites_raw:
+            raise ConfigError("config must define a non-empty 'sites' mapping")
+        if "default_fields" in raw:
+            default_fields = (
+                _validate_fields(raw["default_fields"], "default_fields") or DEFAULT_FIELDS
+            )
+        else:
+            default_fields = DEFAULT_FIELDS
+        sites: list[dict] = []
+        for name, cfg in sites_raw.items():
+            if not isinstance(cfg, dict):
+                raise ConfigError(f"site '{name}' must be a mapping")
+            template = cfg.get("url_template")
+            if not isinstance(template, str) or not template:
+                raise ConfigError(f"site '{name}' must define non-empty 'url_template'")
+            site_fields = (
+                _validate_fields(cfg["fields"], f"sites.{name}.fields") if "fields" in cfg else None
+            )
+            site_max_age = _parse_max_age(cfg.get("max_age_hours"), f"sites.{name}.max_age_hours")
+            site_filter = (
+                _validate_filter(cfg["filter"], f"sites.{name}.filter") if "filter" in cfg else None
+            )
+            site_limit = None
+            if "limit" in cfg and cfg["limit"] is not None:
+                try:
+                    site_limit = int(cfg["limit"])
+                except (TypeError, ValueError) as exc:
+                    raise ConfigError(
+                        f"sites.{name}.limit must be an integer, got {cfg['limit']!r}"
+                    ) from exc
+                if site_limit < 1:
+                    raise ConfigError(f"sites.{name}.limit must be >= 1, got {site_limit}")
+            sites.append(
+                {
+                    "name": name,
+                    "enabled": bool(cfg.get("enabled", True)),
+                    "url_template": template,
+                    "fields": site_fields,
+                    "max_age_hours": site_max_age,
+                    "filter": site_filter,
+                    "limit": site_limit,
+                }
+            )
+        try:
+            limit = int(raw.get("limit", 2))
+        except (TypeError, ValueError) as exc:
+            raise ConfigError(f"'limit' must be an integer, got {raw.get('limit')!r}") from exc
+        if limit < 1:
+            raise ConfigError(f"'limit' must be >= 1, got {limit}")
+        try:
+            concurrency = int(raw.get("concurrency", 2))
+        except (TypeError, ValueError) as exc:
+            raise ConfigError(
+                f"'concurrency' must be an integer, got {raw.get('concurrency')!r}"
+            ) from exc
+        if concurrency < 1:
+            raise ConfigError(f"'concurrency' must be >= 1, got {concurrency}")
+        proxy_url = raw.get("proxy")
+        proxy = (
+            {"url": proxy_url.strip()} if isinstance(proxy_url, str) and proxy_url.strip() else None
+        )
+        return {
+            "keywords": keywords,
+            "limit": limit,
+            "concurrency": concurrency,
+            "default_fields": default_fields,
+            "max_age_hours": _parse_max_age(raw.get("max_age_hours"), "max_age_hours"),
+            "filter": _validate_filter(raw.get("filter"), "filter"),
+            "sites": sites,
+            "proxy": proxy,
+            "timeouts": _parse_timeouts(raw.get("timeouts")),
+        }
+
+    @model_validator(mode="after")
+    def _check_urls(self) -> AppConfig:
+        if self.keywords:
+            sample_vars = _build_template_vars(self.keywords[0])
+            for site in self.sites:
+                _resolve_url(site.name, site.url_template, sample_vars)
+        return self
 
     @property
     def keyword(self) -> str:
@@ -172,10 +278,8 @@ def _validate_fields(raw: object, source: str) -> tuple[str, ...]:
         if not isinstance(entry, str):
             raise ConfigError(f"{source} entries must be strings, got {entry!r}")
         if entry not in CANONICAL_FIELDS:
-            from .log import get_logger as _get_logger
-
-            _get_logger().warning(
-                "[config] %s contains unknown field '%s'; ignored. allowed: %s",
+            get_logger().warning(
+                "[config] {} contains unknown field '{}'; ignored. allowed: {}",
                 source,
                 entry,
                 sorted(CANONICAL_FIELDS),
@@ -211,10 +315,8 @@ def _validate_filter(raw: object, source: str) -> dict[str, list[str]]:
         if not isinstance(key, str):
             raise ConfigError(f"{source} keys must be strings, got {key!r}")
         if key not in FILTERABLE_FIELDS:
-            from .log import get_logger as _get_logger
-
-            _get_logger().warning(
-                "[config] %s contains unknown filter field '%s'; ignored. allowed: %s",
+            get_logger().warning(
+                "[config] {} contains unknown filter field '{}'; ignored. allowed: {}",
                 source,
                 key,
                 sorted(FILTERABLE_FIELDS),
@@ -252,110 +354,59 @@ def _resolve_keywords(raw: dict) -> tuple[str, ...]:
     raise ConfigError("config must define non-empty 'keywords' (list) or 'keyword' (string)")
 
 
+_TIMEOUT_FIELDS: frozenset[str] = frozenset(
+    {
+        "http_seconds",
+        "playwright_goto_ms",
+        "playwright_networkidle_ms",
+        "playwright_settle_seconds",
+        "indeed_api_seconds",
+    }
+)
+
+
+def _parse_timeouts(raw: object) -> FetchTuning:
+    if raw is None:
+        return FetchTuning()
+    if not isinstance(raw, dict):
+        raise ConfigError(f"'timeouts' must be a mapping, got {type(raw).__name__}")
+    overrides: dict[str, int] = {}
+    for key, value in raw.items():
+        if key not in _TIMEOUT_FIELDS:
+            get_logger().warning(
+                "[config] timeouts.{} unknown; ignored. allowed: {}",
+                key,
+                sorted(_TIMEOUT_FIELDS),
+            )
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ConfigError(f"timeouts.{key} must be a positive integer, got {value!r}")
+        overrides[key] = value
+    return FetchTuning(**overrides)
+
+
+def _format_validation_error(exc: ValidationError) -> str:
+    parts: list[str] = []
+    for err in exc.errors():
+        original = err.get("ctx", {}).get("error")
+        if isinstance(original, ConfigError):
+            parts.append(str(original))  # exact original message (verified present in ctx.error)
+        else:
+            loc = ".".join(str(p) for p in err["loc"])
+            parts.append(f"{loc}: {err['msg']}" if loc else err["msg"])
+    return "; ".join(parts) or "invalid config"
+
+
 def load(path: Path) -> AppConfig:
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
-
     raw = yaml.safe_load(path.read_text()) or {}
     if not isinstance(raw, dict):
         raise ConfigError(f"config root must be a mapping, got {type(raw).__name__}")
-
-    keywords = _resolve_keywords(raw)
-
-    sites_raw = raw.get("sites")
-    if not isinstance(sites_raw, dict) or not sites_raw:
-        raise ConfigError("config must define a non-empty 'sites' mapping")
-
-    if "default_fields" in raw:
-        default_fields = _validate_fields(raw["default_fields"], "default_fields")
-        if not default_fields:
-            default_fields = DEFAULT_FIELDS
-    else:
-        default_fields = DEFAULT_FIELDS
-
-    sites: list[SiteConfig] = []
-    sample_vars = _build_template_vars(keywords[0])
-    for name, cfg in sites_raw.items():
-        if not isinstance(cfg, dict):
-            raise ConfigError(f"site '{name}' must be a mapping")
-        template = cfg.get("url_template")
-        if not isinstance(template, str) or not template:
-            raise ConfigError(f"site '{name}' must define non-empty 'url_template'")
-        _validate_url_host(name, template)
-        _resolve_url(name, template, sample_vars)
-        enabled = bool(cfg.get("enabled", True))
-
-        site_fields: tuple[str, ...] | None = None
-        if "fields" in cfg:
-            site_fields = _validate_fields(cfg["fields"], f"sites.{name}.fields")
-
-        site_max_age = _parse_max_age(cfg.get("max_age_hours"), f"sites.{name}.max_age_hours")
-
-        site_filter: dict[str, list[str]] | None = None
-        if "filter" in cfg:
-            site_filter = _validate_filter(cfg["filter"], f"sites.{name}.filter")
-
-        site_limit: int | None = None
-        if "limit" in cfg and cfg["limit"] is not None:
-            try:
-                site_limit = int(cfg["limit"])
-            except (TypeError, ValueError) as exc:
-                raise ConfigError(
-                    f"sites.{name}.limit must be an integer, got {cfg['limit']!r}"
-                ) from exc
-            if site_limit < 1:
-                raise ConfigError(f"sites.{name}.limit must be >= 1, got {site_limit}")
-
-        sites.append(
-            SiteConfig(
-                name=name,
-                enabled=enabled,
-                url_template=template,
-                fields=site_fields,
-                max_age_hours=site_max_age,
-                filter=site_filter,
-                limit=site_limit,
-            )
-        )
-
-    limit_raw = raw.get("limit", 2)
     try:
-        limit = int(limit_raw)
-    except (TypeError, ValueError) as exc:
-        raise ConfigError(f"'limit' must be an integer, got {limit_raw!r}") from exc
-    if limit < 1:
-        raise ConfigError(f"'limit' must be >= 1, got {limit}")
-
-    concurrency_raw = raw.get("concurrency", 2)
-    try:
-        concurrency = int(concurrency_raw)
-    except (TypeError, ValueError) as exc:
-        raise ConfigError(f"'concurrency' must be an integer, got {concurrency_raw!r}") from exc
-    if concurrency < 1:
-        raise ConfigError(f"'concurrency' must be >= 1, got {concurrency}")
-
-    output_dir = Path(str(raw.get("output_dir", "output")))
-
-    max_age_hours = _parse_max_age(raw.get("max_age_hours"), "max_age_hours")
-
-    global_filter = _validate_filter(raw.get("filter"), "filter")
-
-    proxy: ProxyConfig | None = None
-    proxy_url = raw.get("proxy")
-    if isinstance(proxy_url, str) and proxy_url.strip():
-        proxy = ProxyConfig(url=proxy_url.strip())
-
-    return AppConfig(
-        keywords=keywords,
-        limit=limit,
-        concurrency=concurrency,
-        output_dir=output_dir,
-        default_fields=default_fields,
-        filter=global_filter,
-        max_age_hours=max_age_hours,
-        sites=tuple(sites),
-        proxy=proxy,
-    )
+        return AppConfig.model_validate(raw)
+    except ValidationError as exc:
+        raise ConfigError(_format_validation_error(exc)) from exc
 
 
 def keyword_slug(keyword: str) -> str:
