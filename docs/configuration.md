@@ -278,6 +278,93 @@ Comment out or remove the `proxy` key:
 # proxy: "socks5://localhost:1080"
 ```
 
+## Environment variables
+
+Deploy-time knobs that override or extend `config.yaml`. All are optional unless
+marked **required**. Managed in `scraper/settings.py` (Mongo + logging) and the
+bot entrypoint/run scripts.
+
+| Variable | Default | Component | Effect |
+|---|---|---|---|
+| `MONGO_URI` | `mongodb://localhost:27017` (compose derives from `MONGO_ROOT_*`) | mcp + scraper | Mongo connection string |
+| `MONGO_DB_NAME` | `job_scraper` | mcp + scraper | Database name |
+| `MONGO_COLLECTION_NAME` | `scrape_runs` | mcp | Run-history collection |
+| `MONGO_SERVER_SELECTION_TIMEOUT_MS` | `3000` | mcp + scraper | Fast-fail Mongo selection timeout |
+| `LOG_LEVEL` | `INFO` | mcp + scraper | Log level (DEBUG\|INFO\|WARNING\|ERROR) |
+| `LOG_FORMAT` | `json` | mcp + scraper | Log format: `json` (loguru-native `serialize` envelope) or `plain` |
+| `LOG_FILE` | _(empty)_ | mcp + scraper | Opt-in rotating file path; empty = stdout only |
+| `LOG_FILE_MAX_BYTES` | `5242880` | mcp + scraper | Rotation size in bytes |
+| `LOG_FILE_BACKUP_COUNT` | `3` | mcp + scraper | Number of rotation backups kept |
+| `STATUS_FILE` | `logs/status.json` | mcp | Run-status snapshot path |
+| `SENTRY_ENABLED` | `false` | mcp | Toggle Sentry error monitoring on/off (empty = false) |
+| `SENTRY_DSN` | _(empty)_ | mcp | Sentry project DSN (**secret**); required when `SENTRY_ENABLED=true` |
+| `SENTRY_ENVIRONMENT` | `production` | mcp | Sentry environment tag |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | mcp | Perf-trace sample rate; `0.0` = errors only |
+| `SENTRY_RELEASE` | _(empty)_ | mcp | Optional release/version tag (CI sets the commit SHA) |
+| `MCP_HOST` | `0.0.0.0` | mcp | Bind host |
+| `MCP_PORT` | `8080` | mcp | Bind port |
+| `SCRAPER_CONFIG` | `config.yaml` | mcp | Config file path |
+| `PROXY_TEST_URL` | `https://api.ipify.org?format=json` | mcp | Proxy-test target URL |
+| `PROXY_TEST_TIMEOUT_SEC` | `25` | mcp | Proxy-test request timeout |
+| `BOT_SCHEDULE` | _(empty → `config.yaml` → `0 11 * * *`)_ | bot | Cron schedule; resolved at container start, no rebuild needed |
+| `CLAUDE_MODEL` | _(empty → `config.yaml` → `claude-haiku-4-5-20251001`)_ | bot | Claude model for the cron run |
+| `BOT_LOG_FILE` | _(empty)_ | bot | Opt-in cron-log file path; empty = stdout only |
+| `TZ` | `Asia/Jakarta` | bot | Container timezone |
+| `CLAUDE_CONFIG_DIR` / `CLAUDE_CONFIG_FILE` | _(host paths)_ | bot | Mounted Claude config paths |
+| `DISCORD_BOT_TOKEN` | **required** | bot | Discord bot application token |
+| `DISCORD_CHANNEL_ID` | **required** | bot | Discord channel ID for job posts |
+| `MONGO_ROOT_USER` | `admin` | mongo | Init username |
+| `MONGO_ROOT_PASSWORD` | **required** | mongo | Init password |
+
+> Logging runs through **loguru** as a single STDOUT stream by default (Factor XI),
+> emitting **JSON** (loguru-native `serialize` envelope; set `LOG_FORMAT=plain` for
+> human-readable lines). `docker logs` captures everything — including uvicorn,
+> FastMCP, and pymongo, which are routed into loguru via a root intercept handler.
+> Set `LOG_FILE` (scraper-mcp) or `BOT_LOG_FILE` (bot) to opt into a rotating file
+> alongside stdout.
+
+> **Sentry (error monitoring)** is **off by default**. Set `SENTRY_ENABLED=true`
+> plus a `SENTRY_DSN` to activate it on `scraper-mcp` (only that service is
+> instrumented — the cron bot's scraping runs through it). Capture rides on loguru;
+> genuine errors get stack traces while routine scrape soft-failures (anti-bot
+> walls, fetcher fall-through) are filtered out. Errors-only by default
+> (`SENTRY_TRACES_SAMPLE_RATE=0.0`). The DSN is a **secret** — keep it in `.env`
+> locally / a GitHub secret in prod, never in `config.yaml`. Wiring lives in
+> `scraper/observability.py`.
+
+## New `config.yaml` keys
+
+### `bot.model` (optional)
+
+String. The Claude model the cron bot uses. Overridable at runtime by the
+`CLAUDE_MODEL` environment variable — no image rebuild needed.
+
+```yaml
+bot:
+  model: claude-haiku-4-5-20251001
+```
+
+### `timeouts` (optional)
+
+All timeout keys are optional; omitted keys use the listed defaults.
+
+| Key | Default | Effect |
+|---|---|---|
+| `http_seconds` | `30` | HTTP request timeout for non-Playwright fetches |
+| `playwright_goto_ms` | `60000` | Playwright `page.goto()` timeout in ms |
+| `playwright_networkidle_ms` | `15000` | Playwright network-idle wait in ms |
+| `playwright_settle_seconds` | `2` | Post-idle settle delay in seconds |
+| `indeed_api_seconds` | `30` | Indeed API request timeout in seconds |
+
+```yaml
+timeouts:
+  http_seconds: 30
+  playwright_goto_ms: 60000
+  playwright_networkidle_ms: 15000
+  playwright_settle_seconds: 2
+  indeed_api_seconds: 30
+```
+
 ## Loading the resolved config
 
 ```python

@@ -249,7 +249,12 @@ docker rm -f job-scraper-mongo && docker volume rm job-scrapper_mongo-data
 
 # Config: config.yaml + the dev patch
 
-`config.yaml` is the single source of truth, committed to the repo and baked
+**Config layers (where each knob lives):**
+- **`scraper/settings.py`** — environment-derived deploy handles (Mongo connection/names, logging level/format/routing). One place; read from env.
+- **`config.yaml`** — behavior + tuning (keywords, sites, filters, limits, `timeouts`, `bot.model`, `bot.schedule`).
+- **`scraper/config.py`** — fixed HTTP identity constants (User-Agent, Accept-Language) + `FetchTuning` defaults.
+
+`config.yaml` is the single source of truth for behavior config, committed to the repo and baked
 into Docker images at build time. Key fields:
 
 | Field                   | Purpose                                                   |
@@ -286,10 +291,13 @@ bind-mounts `/tmp/config.dev.yaml` into the `scraper-mcp` container
 In **prod**, `config_merge` is `null` in `scripts/environments.yaml`, so no
 merge runs — the image-baked `config.yaml` is used directly.
 
-> **Note on `bot.schedule`:** the crontab is generated from `config.yaml` at
-> **image build time** (Dockerfile `bot` stage). Changing `bot.schedule` requires
-> a rebuild and redeploy — editing `config.yaml` on a running container has no
-> effect.
+> **`bot.schedule` and `bot.model` are now resolved at container start**, not baked
+> at build time. The bot entrypoint (`cron/entrypoint.sh`) generates the crontab on
+> boot with precedence `BOT_SCHEDULE` env → `config.yaml` `bot.schedule` → default
+> `0 11 * * *`. `cron/run-scraper.sh` resolves the model `CLAUDE_MODEL` env →
+> `config.yaml` `bot.model` → default. So changing the schedule/model needs only a
+> container restart (or a GitHub `vars.BOT_SCHEDULE` / `vars.CLAUDE_MODEL` redeploy) —
+> **no image rebuild**.
 
 # How the filter works
 
@@ -315,10 +323,12 @@ job passes through — it is not dropped.
 
 # Cron job
 
-In the bot image, `supercronic` is the entrypoint, running
-`cron/scraper-crontab`. This file is generated at build time from `config.yaml`
-`bot.schedule` (currently `0 11 * * *` — 11:00 AM daily). Each tick executes
-`cron/run-scraper.sh`, which runs:
+In the bot image, `cron/entrypoint.sh` generates `cron/scraper-crontab` at
+**container start** (not build time) using the precedence `BOT_SCHEDULE` env →
+`config.yaml` `bot.schedule` → default `0 11 * * *` (11:00 AM daily), then
+`exec`s `supercronic` on it. Each tick executes `cron/run-scraper.sh`, which
+resolves the model (`CLAUDE_MODEL` env → `config.yaml` `bot.model` → default)
+and runs:
 
 ```bash
 claude --dangerously-skip-permissions --verbose --output-format stream-json \
@@ -329,11 +339,11 @@ claude --dangerously-skip-permissions --verbose --output-format stream-json \
 step (tool calls, messages, result) so the run streams live to the log; default
 text mode prints only the final result at the very end.
 
-Output is logged to `/workspace/scraper-bot/cron/scraper.log`. `cron/entrypoint.sh`
-just `exec`s supercronic.
+Output streams to STDOUT (Factor XI) — visible via `docker logs job-scraper-bot`.
+Set `BOT_LOG_FILE` to ALSO append to a file inside the container.
 
 **Who triggers it in prod:** supercronic inside the deployed `bot` container,
-automatically on the baked schedule.
+automatically on the runtime schedule.
 
 **In dev**, the bot is overridden to `sleep infinity` (`docker-compose.dev.yml`),
 so it idles and does not run cron. To fire a run manually:
@@ -399,6 +409,29 @@ then run the same commands.
 
 # Check logs
 
+Logging runs through **loguru** as a **single STDOUT stream** by default (Factor XI)
+— `docker logs` shows everything (including uvicorn/FastMCP/pymongo, routed into
+loguru via a root intercept handler). Tune with `LOG_LEVEL` (DEBUG|INFO|WARNING|ERROR,
+default INFO) and `LOG_FORMAT` (json|plain, **default json** — loguru-native serialize;
+use `plain` for human-readable lines). To opt into a rotating file, set
+`LOG_FILE` (scraper-mcp) or `BOT_LOG_FILE` (bot) to a path inside the container.
+
+## Error monitoring (Sentry)
+
+Optional, **off by default**, toggle-gated. Set `SENTRY_ENABLED=true` and a
+`SENTRY_DSN` (the secret) to send genuine errors — with stack traces — to Sentry.
+Only `scraper-mcp` is instrumented (the nightly cron's scraping runs through it).
+Errors-only by default (`SENTRY_TRACES_SAMPLE_RATE=0.0`); routine scrape
+soft-failures (anti-bot walls, fetcher fall-through) are filtered out so Sentry
+never firehoses.
+
+- **Local:** put `SENTRY_ENABLED=true` + `SENTRY_DSN=…` in `.env` (gitignored).
+- **Prod:** add a GitHub repo **secret** `SENTRY_DSN` and **variable**
+  `SENTRY_ENABLED=true` (deploy injects them into `scraper-mcp`). `SENTRY_RELEASE`
+  is set to the commit SHA automatically.
+
+See [`docs/configuration.md`](docs/configuration.md) for all `SENTRY_*` knobs.
+
 Stream container logs:
 
 ```bash
@@ -409,10 +442,10 @@ docker logs -f job-scraper-mongo     # MongoDB
 
 Via TUI: select a scope row → **Logs** (runs `docker compose … logs -f --tail=200 <services>`).
 
-Read the cron run log inside the bot container:
+Read the cron run log (only if `BOT_LOG_FILE` is set inside the bot container):
 
 ```bash
-docker exec job-scraper-bot cat /workspace/scraper-bot/cron/scraper.log
+docker exec job-scraper-bot cat "$BOT_LOG_FILE"
 ```
 
 # How to debug the bot
