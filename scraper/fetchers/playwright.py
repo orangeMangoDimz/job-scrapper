@@ -4,7 +4,7 @@ from __future__ import annotations
 import contextlib
 import time
 
-from ..config import USER_AGENT
+from ..config import BROWSER_LOCALE, BROWSER_VIEWPORT, USER_AGENT, FetchTuning, redact_proxy_url
 from ..log import get_logger
 from .base import FetchAttempt, detect_challenge
 
@@ -14,14 +14,15 @@ _LOG = get_logger()
 class PlaywrightFetcher:
     name = "playwright"
 
-    def __init__(self, proxy: str | None = None) -> None:
+    def __init__(self, proxy: str | None = None, tuning: FetchTuning | None = None) -> None:
         self._proxy = proxy
+        self._tuning = tuning or FetchTuning()
 
     def fetch(self, url: str) -> tuple[str | None, FetchAttempt]:
         try:
             from playwright.sync_api import sync_playwright  # type: ignore[import-untyped]
         except Exception as exc:
-            _LOG.warning("[playwright] not installed: %s", exc)
+            _LOG.warning("[playwright] not installed: {}", exc)
             return None, FetchAttempt(
                 fetcher=self.name,
                 code="not_installed",
@@ -39,7 +40,7 @@ class PlaywrightFetcher:
                 stealth_sync = None
 
         if self._proxy:
-            _LOG.info("[playwright] using proxy: %s", self._proxy)
+            _LOG.info("[playwright] using proxy: {}", redact_proxy_url(self._proxy))
 
         try:
             with sync_playwright() as p:
@@ -52,45 +53,53 @@ class PlaywrightFetcher:
                         "--disable-gpu",
                     ],
                 )
-                context_kwargs: dict = {
-                    "user_agent": USER_AGENT,
-                    "locale": "id-ID",
-                    "viewport": {"width": 1366, "height": 768},
-                }
-                if self._proxy:
-                    context_kwargs["proxy"] = {"server": self._proxy}
-                context = browser.new_context(**context_kwargs)
-                page = context.new_page()
-                if stealth_v2 is not None:
-                    stealth_v2().apply_stealth_sync(page)
-                elif stealth_sync is not None:
-                    stealth_sync(page)
+                try:
+                    context_kwargs: dict = {
+                        "user_agent": USER_AGENT,
+                        "locale": BROWSER_LOCALE,
+                        "viewport": dict(BROWSER_VIEWPORT),
+                    }
+                    if self._proxy:
+                        context_kwargs["proxy"] = {"server": self._proxy}
+                    context = browser.new_context(**context_kwargs)
+                    page = context.new_page()
+                    if stealth_v2 is not None:
+                        stealth_v2().apply_stealth_sync(page)
+                    elif stealth_sync is not None:
+                        stealth_sync(page)
 
-                page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-                with contextlib.suppress(Exception):
-                    page.wait_for_load_state("networkidle", timeout=15_000)
-                time.sleep(2)
-                html = page.content()
-                context.close()
-                browser.close()
+                    page.goto(
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=self._tuning.playwright_goto_ms,
+                    )
+                    with contextlib.suppress(Exception):
+                        page.wait_for_load_state(
+                            "networkidle", timeout=self._tuning.playwright_networkidle_ms
+                        )
+                    time.sleep(self._tuning.playwright_settle_seconds)
+                    html = page.content()
+                finally:
+                    with contextlib.suppress(Exception):
+                        browser.close()
         except Exception as exc:
             msg = str(exc)
             lowered = msg.lower()
             if "asyncio" in lowered and "loop" in lowered:
-                _LOG.error("[playwright] asyncio conflict on %s", url)
+                _LOG.error("[playwright] asyncio conflict on {}", url)
                 return None, FetchAttempt(
                     fetcher=self.name,
                     code="runtime_error",
                     detail="asyncio sync-API conflict",
                 )
             if "timeout" in lowered:
-                _LOG.warning("[playwright] timeout on %s", url)
+                _LOG.warning("[playwright] timeout on {}", url)
                 return None, FetchAttempt(
                     fetcher=self.name,
                     code="timeout",
                     detail=msg[:200],
                 )
-            _LOG.error("[playwright] error on %s: %s", url, exc)
+            _LOG.error("[playwright] error on {}: {}", url, exc)
             return None, FetchAttempt(
                 fetcher=self.name,
                 code="runtime_error",
@@ -99,7 +108,7 @@ class PlaywrightFetcher:
 
         challenge = detect_challenge(html)
         if challenge:
-            _LOG.warning("[playwright] %s blocked by challenge page", url)
+            _LOG.warning("[playwright] {} blocked by challenge page", url)
             return None, FetchAttempt(
                 fetcher=self.name,
                 code="challenge",

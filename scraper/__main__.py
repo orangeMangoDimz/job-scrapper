@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 
 from .config_loader import ConfigError, load
+from .log import get_logger
+from .observability import init_sentry
 from .runner import run
 
 DEFAULT_CONFIG = Path("config.yaml")
@@ -39,13 +41,15 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    init_sentry()
     args = _parse_args(list(argv if argv is not None else sys.argv[1:]))
     try:
         config = load(args.config)
     except ConfigError as exc:
-        print(f"[config] {exc}", file=sys.stderr)
+        get_logger().error("[config] {}", exc)
         return 2
-    return run(config, targets=args.sites, keywords=args.keywords)
+    exit_code, _ = run(config, targets=args.sites, keywords=args.keywords)
+    return exit_code
 
 
 if __name__ == "__main__":

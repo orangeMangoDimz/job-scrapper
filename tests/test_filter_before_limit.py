@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from unittest.mock import MagicMock
 
 from scraper.runner import run_one
@@ -31,7 +29,7 @@ def _job(title: str, company: str, location: str, posted_at: str | None = None):
 
 # Excluded jobs are ordered FIRST so cap-then-filter (the bug) yields count 0
 # and filter-then-cap (the fix) yields count 2 — a 0-vs-2 gap proves ordering.
-def test_content_filter_runs_before_cap(tmp_path: Path):
+def test_content_filter_runs_before_cap():
     jobs = [
         _job("Bandung Role A", "B1", "Bandung"),
         _job("Bandung Role B", "B2", "Bandung"),
@@ -46,22 +44,20 @@ def test_content_filter_runs_before_cap(tmp_path: Path):
     scraper.limit = 2
     scraper.parse = MagicMock(return_value=jobs)
 
-    run_one(
+    result = run_one(
         scraper=scraper,
         fetcher=_make_fetcher(html="<html>non-empty</html>"),
-        output_dir=tmp_path,
         keyword="data analyst",
         fields=frozenset({"title", "location"}),  # no "requirements" → no detail fetch
         max_age_hours=None,
         content_filter={"location": ["jakarta"]},
     )
 
-    out = json.loads((tmp_path / "linkedin.json").read_text())
-    assert out["count"] == 2
-    assert all("jakarta" in j["location"].lower() for j in out["jobs"])
+    assert result.filtered["count"] == 2
+    assert all("jakarta" in j["location"].lower() for j in result.filtered["jobs"])
 
 
-def test_max_age_runs_before_cap(tmp_path: Path):
+def test_max_age_runs_before_cap():
     now = datetime.now(UTC)
     stale = (now - timedelta(hours=100)).isoformat()
     recent = (now - timedelta(hours=1)).isoformat()
@@ -79,19 +75,17 @@ def test_max_age_runs_before_cap(tmp_path: Path):
     scraper.limit = 2
     scraper.parse = MagicMock(return_value=jobs)
 
-    run_one(
+    result = run_one(
         scraper=scraper,
         fetcher=_make_fetcher(html="<html>non-empty</html>"),
-        output_dir=tmp_path,
         keyword="data analyst",
         fields=frozenset({"title", "posted_at"}),
         max_age_hours=24,
         content_filter={},
     )
 
-    out = json.loads((tmp_path / "linkedin.json").read_text())
-    assert out["count"] == 2
-    assert all(j["title"].startswith("Recent") for j in out["jobs"])
+    assert result.filtered["count"] == 2
+    assert all(j["title"].startswith("Recent") for j in result.filtered["jobs"])
 
 
 _LINKEDIN_HTML = """<ul>

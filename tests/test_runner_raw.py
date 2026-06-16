@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock
 
 from scraper import runner
@@ -10,8 +9,8 @@ def _job(title: str, location: str) -> dict:
     return {"title": title, "company": "ACME", "url": f"https://x/{title}", "location": location}
 
 
-def test_run_one_writes_raw_before_filter(tmp_path):
-    """raw.json holds ALL parsed jobs; the filtered json is cut down by filter+limit."""
+def test_run_one_returns_raw_before_filter():
+    """raw holds ALL parsed jobs; filtered is cut down by filter + limit."""
     scraper = MagicMock()
     scraper.name = "fake"
     scraper.url = "https://example.test/search"
@@ -28,52 +27,60 @@ def test_run_one_writes_raw_before_filter(tmp_path):
     fetcher.fetch.return_value.html = "<html>ok</html>"
     fetcher.fetch.return_value.attempts = []
 
-    runner.run_one(
+    result = runner.run_one(
         scraper,
         fetcher,
-        tmp_path,
         "data analyst",
         frozenset({"title", "company", "url", "location"}),
         None,  # max_age_hours
         {"location": ["jakarta"]},  # content_filter drops Surabaya
     )
 
-    raw = json.loads((tmp_path / "fake.raw.json").read_text())
-    filtered = json.loads((tmp_path / "fake.json").read_text())
+    assert result.keyword == "data analyst"
+    assert result.site == "fake"
+    assert result.raw["count"] == 3  # all parsed jobs survive
+    assert {j["title"] for j in result.raw["jobs"]} == {"A", "B", "C"}
+    assert result.filtered["count"] == 2  # Surabaya filtered out
+    assert {j["title"] for j in result.filtered["jobs"]} == {"A", "B"}
 
-    assert raw["count"] == 3  # all parsed jobs survive
-    assert {j["title"] for j in raw["jobs"]} == {"A", "B", "C"}
-    assert filtered["count"] == 2  # Surabaya filtered out
-    assert {j["title"] for j in filtered["jobs"]} == {"A", "B"}
 
+def test_run_one_returns_reset_raw_on_fetch_failure():
+    """A fetch failure yields an error-marked ``filtered`` + empty ``raw``.
 
-def test_run_one_resets_raw_on_fetch_failure(tmp_path):
-    """A later fetch failure must not leave the previous run's raw file on disk.
-
-    output/ is a persistent volume; if the raw file is only written on success, a
-    failed run would mis-attribute the previous run's jobs as its own raw_results.
+    In-memory results can't carry across runs, so the file-staleness class the
+    old disk-based code guarded against (output/ was a persistent volume) no
+    longer exists.
     """
     scraper = MagicMock()
     scraper.name = "fake"
     scraper.url = "https://example.test/search"
     scraper.limit = 5
     scraper.requires_search_html = True
-    scraper.parse.return_value = [_job("A", "Jakarta"), _job("B", "Jakarta")]
+    scraper.parse.return_value = [_job("A", "Jakarta")]
 
     fetcher = MagicMock()
+    fetcher.fetch.return_value.html = ""  # fetch failure
     fetcher.fetch.return_value.attempts = []
-    fields = frozenset({"title", "company", "url", "location"})
 
-    # run 1: success → writes raw with 2 jobs
-    fetcher.fetch.return_value.html = "<html>ok</html>"
-    runner.run_one(scraper, fetcher, tmp_path, "data analyst", fields, None, {})
-    assert json.loads((tmp_path / "fake.raw.json").read_text())["count"] == 2
+    result = runner.run_one(
+        scraper,
+        fetcher,
+        "data analyst",
+        frozenset({"title", "company", "url", "location"}),
+        None,
+        {},
+    )
 
-    # run 2: fetch failure (no html) → raw must be reset, not stale
-    fetcher.fetch.return_value.html = ""
-    runner.run_one(scraper, fetcher, tmp_path, "data analyst", fields, None, {})
-
-    raw = json.loads((tmp_path / "fake.raw.json").read_text())
-    assert raw["count"] == 0
-    assert raw["jobs"] == []
-    assert raw.get("error") == "fetch failed"
+    assert result.filtered == {
+        "error": "fetch failed",
+        "url": "https://example.test/search",
+        "keyword": "data analyst",
+        "attempts": [],
+    }
+    assert result.raw == {
+        "keyword": "data analyst",
+        "count": 0,
+        "jobs": [],
+        "error": "fetch failed",
+    }
+    scraper.parse.assert_not_called()

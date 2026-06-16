@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
 
+from ..config import CHROME_IMPERSONATE
 from ..log import get_logger
 from ..types import Job, empty_job
 from .base import Scraper
@@ -123,14 +124,14 @@ def _country_from_url(url: str) -> str:
     return "id"
 
 
-def _fetch_jobs_from_api(keyword: str, where: str, limit: int) -> list[dict]:
+def _fetch_jobs_from_api(keyword: str, where: str, limit: int, timeout: int = 30) -> list[dict]:
     if not keyword:
         _LOG.warning("[indeed-api] empty keyword; nothing to query")
         return []
     try:
         from curl_cffi import requests as cffi_requests  # type: ignore[attr-defined]
     except Exception as exc:
-        _LOG.error("[indeed-api] curl_cffi missing: %s", exc)
+        _LOG.error("[indeed-api] curl_cffi missing: {}", exc)
         return []
 
     query = _GRAPHQL_QUERY_TEMPLATE.format(
@@ -139,22 +140,22 @@ def _fetch_jobs_from_api(keyword: str, where: str, limit: int) -> list[dict]:
         radius=_DEFAULT_RADIUS_MILES,
         limit=max(1, min(limit, 100)),
     )
-    _LOG.info("[indeed-api] POST %s keyword=%r where=%r", _INDEED_API_URL, keyword, where)
+    _LOG.info("[indeed-api] POST {} keyword={!r} where={!r}", _INDEED_API_URL, keyword, where)
     try:
         response = cffi_requests.post(
             _INDEED_API_URL,
             json={"query": query},
             headers=_INDEED_API_HEADERS,
-            impersonate="chrome131",
-            timeout=30,
+            impersonate=CHROME_IMPERSONATE,
+            timeout=timeout,
         )
     except Exception as exc:
-        _LOG.error("[indeed-api] POST error: %s: %s", type(exc).__name__, exc)
+        _LOG.error("[indeed-api] POST error: {}: {}", type(exc).__name__, exc)
         return []
 
     if response.status_code != 200:
         _LOG.warning(
-            "[indeed-api] status=%d body=%s",
+            "[indeed-api] status={} body={}",
             response.status_code,
             response.text[:200],
         )
@@ -162,11 +163,11 @@ def _fetch_jobs_from_api(keyword: str, where: str, limit: int) -> list[dict]:
     try:
         payload = response.json()
     except ValueError as exc:
-        _LOG.error("[indeed-api] non-JSON response: %s", exc)
+        _LOG.error("[indeed-api] non-JSON response: {}", exc)
         return []
     errors = payload.get("errors")
     if errors:
-        _LOG.warning("[indeed-api] graphql errors: %s", errors)
+        _LOG.warning("[indeed-api] graphql errors: {}", errors)
     results = (payload.get("data") or {}).get("jobSearch", {}).get("results") or []
     jobs: list[dict] = []
     for item in results:
@@ -185,9 +186,11 @@ class IndeedScraper(Scraper):
     def parse(self, html: str) -> list[Job]:
         keyword, where = _extract_search_params(self.url)
         country = _country_from_url(self.url)
-        jobs_data = _fetch_jobs_from_api(keyword, where, self.limit)
+        jobs_data = _fetch_jobs_from_api(
+            keyword, where, self.limit, timeout=self.tuning.indeed_api_seconds
+        )
         _LOG.info(
-            "[indeed-api] keyword=%r where=%r returned %d job(s)",
+            "[indeed-api] keyword={!r} where={!r} returned {} job(s)",
             keyword,
             where,
             len(jobs_data),

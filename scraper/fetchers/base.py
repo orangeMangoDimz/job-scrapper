@@ -70,13 +70,13 @@ class FetchChain:
     def fetch(self, url: str) -> FetchResult:
         attempts: list[FetchAttempt] = []
         for fetcher in self._fetchers:
-            _LOG.debug("[fetch] trying %s for %s", fetcher.name, url)
+            _LOG.debug("[fetch] trying {} for {}", fetcher.name, url)
             html, attempt = fetcher.fetch(url)
             attempts.append(attempt)
             if html and attempt.code == "ok":
                 return FetchResult(html=html, attempts=tuple(attempts))
             _LOG.debug(
-                "[fetch] %s insufficient (%s), falling through",
+                "[fetch] {} insufficient ({}), falling through",
                 fetcher.name,
                 attempt.code,
             )
