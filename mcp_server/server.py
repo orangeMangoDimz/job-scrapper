@@ -6,22 +6,27 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 import yaml
 from mcp.server.fastmcp import FastMCP  # type: ignore[import-untyped]
+from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from mcp_server import mongo
-from scraper.config import ACCEPT_LANGUAGE, USER_AGENT
-from scraper.config_loader import AppConfig, ConfigError, keyword_slug, load
+from scraper import settings
+from scraper.config import ACCEPT_LANGUAGE, CHROME_IMPERSONATE, USER_AGENT, redact_proxy_url
+from scraper.config_loader import AppConfig, ConfigError, load
 from scraper.log import get_logger as _get_logger
+from scraper.observability import init_sentry
 from scraper.runner import run as run_scraper
 from scraper.types import JOB_FIELD_ORDER
 
@@ -31,12 +36,11 @@ DEFAULT_PROXY_TEST_URL = os.environ.get(
     "https://api.ipify.org?format=json",
 )
 PROXY_TEST_TIMEOUT_SEC = float(os.environ.get("PROXY_TEST_TIMEOUT_SEC", "25"))
-CHROME_IMPERSONATE = "chrome131"
 HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("MCP_PORT", "8080"))
 
-_STATUS_PATH = Path("logs/status.json")
-_LOG_PATH = Path("logs/scraper.log")
+_STATUS_PATH = Path(settings.STATUS_FILE)
+_LOG_PATH: Path | None = Path(settings.LOG_FILE) if settings.LOG_FILE else None
 
 mcp = FastMCP("job-scraper", host=HOST, port=PORT)
 
@@ -50,33 +54,13 @@ async def health_check(request: Request) -> Response:
         await run_in_threadpool(mongo.ping)
     except Exception as exc:  # unreachable / selection timeout / op failure
         log = _get_logger()
-        log.warning("health check: mongo ping failed: %s", exc)
+        log.warning("health check: mongo ping failed: {}", exc)
         return JSONResponse({"status": "degraded", "mongo": "error"}, status_code=503)
     return JSONResponse({"status": "ok", "mongo": "ok"})
 
 
 def _load_config(path: Path) -> AppConfig:
     return load(path)
-
-
-def _read_site_output(config: AppConfig, keyword: str, name: str) -> dict[str, Any] | None:
-    path = config.output_dir / keyword_slug(keyword) / f"{name}.json"
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text())
-    except json.JSONDecodeError:
-        return None
-
-
-def _read_site_raw_output(config: AppConfig, keyword: str, name: str) -> dict[str, Any] | None:
-    path = config.output_dir / keyword_slug(keyword) / f"{name}.raw.json"
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text())
-    except json.JSONDecodeError:
-        return None
 
 
 def _build_per_site_counts(results: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
@@ -115,25 +99,6 @@ def _atomic_write_yaml(path: Path, data: dict) -> None:
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(serialized)
     tmp_path.replace(path)
-
-
-def _redact_proxy_url(proxy_url: str) -> str:
-    """Hide proxy password in logged/returned strings."""
-    try:
-        p = urlparse(proxy_url)
-        if not p.hostname:
-            return proxy_url
-        host = p.hostname
-        port = f":{p.port}" if p.port else ""
-        if p.username is not None and p.username != "":
-            netloc = f"{p.username}:***@{host}{port}"
-        elif p.password is not None:
-            netloc = f"***@{host}{port}"
-        else:
-            netloc = f"{host}{port}"
-        return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
-    except Exception:
-        return "<unparseable proxy url>"
 
 
 def _probe_proxy_http(proxy_url: str, test_url: str) -> dict[str, Any]:
@@ -487,7 +452,7 @@ def get_scrape_status() -> dict[str, Any]:
         return {"available": False, "error": f"Could not read status file: {exc}"}
 
     recent_logs: list[str] = []
-    if _LOG_PATH.exists():
+    if _LOG_PATH is not None and _LOG_PATH.exists():
         try:
             lines = _LOG_PATH.read_text(encoding="utf-8", errors="replace").splitlines()
             recent_logs = lines[-30:]
@@ -598,7 +563,7 @@ def test_proxy_connection(
         try:
             config = _load_config(DEFAULT_CONFIG_PATH)
         except ConfigError as exc:
-            log.warning("test_proxy_connection config error: %s", exc)
+            log.warning("test_proxy_connection config error: {}", exc)
             return {"ok": False, "error": str(exc)}
         if not config.proxy:
             return {
@@ -610,9 +575,9 @@ def test_proxy_connection(
         resolved_proxy = config.proxy.url
         used_config_proxy = True
 
-    redacted = _redact_proxy_url(resolved_proxy)
+    redacted = redact_proxy_url(resolved_proxy)
     log.info(
-        "test_proxy_connection proxy=%s test_url=%s",
+        "test_proxy_connection proxy={} test_url={}",
         redacted,
         test_target,
     )
@@ -632,12 +597,12 @@ def test_proxy_connection(
     merged = {**base, **probe}
     if merged.get("ok"):
         log.info(
-            "test_proxy_connection ok duration_ms=%s egress_ip=%s",
+            "test_proxy_connection ok duration_ms={} egress_ip={}",
             duration_ms,
             merged.get("egress_ip"),
         )
     else:
-        log.warning("test_proxy_connection failed: %s", merged.get("error"))
+        log.warning("test_proxy_connection failed: {}", merged.get("error"))
     return merged
 
 
@@ -685,23 +650,24 @@ def scrape_jobs(
                   - not_installed     fetcher dependency missing
     """
     log = _get_logger()
-    log.info("scrape_jobs called sites=%s keywords=%s", sites, keywords)
+    log.info("scrape_jobs called sites={} keywords={}", sites, keywords)
     t_start = time.monotonic()
 
     try:
         config = _load_config(DEFAULT_CONFIG_PATH)
     except ConfigError as exc:
-        log.error("scrape_jobs config error: %s", exc)
+        log.error("scrape_jobs config error: {}", exc)
         return {"error": str(exc)}
 
     target_sites = list(sites) if sites else list(config.enabled_site_names())
     target_keywords = list(keywords) if keywords else list(config.keywords)
 
-    # run scraper — writes per-site JSON output files
-    exit_code: int = run_scraper(config, targets=target_sites, keywords=target_keywords)
+    # scrape in-process; results come back in memory (no output/ disk round-trip)
+    exit_code, site_results = run_scraper(config, targets=target_sites, keywords=target_keywords)
+    by_pair = {(r.keyword, r.site): r for r in site_results}
 
-    # read output files: raw (all jobs) + filtered (post-filter) payloads for Mongo,
-    # normalize the filtered jobs for the response
+    # build raw (all jobs) + filtered (post-filter) payloads for Mongo, normalize
+    # the filtered jobs for the response
     results: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     filtered_results: list[dict[str, Any]] = []
@@ -709,16 +675,14 @@ def scrape_jobs(
     for keyword in target_keywords:
         per_site: list[dict[str, Any]] = []
         for name in target_sites:
-            raw_payload = _read_site_raw_output(config, keyword, name)
-            if raw_payload is not None:
-                raw_results.append({"keyword": keyword, "site": name, "payload": raw_payload})
-
-            payload = _read_site_output(config, keyword, name)
-            if payload is None:
+            site_result = by_pair.get((keyword, name))
+            if site_result is None:
                 errors.append(
-                    {"keyword": keyword, "site": name, "reason": "missing or invalid output JSON"}
+                    {"keyword": keyword, "site": name, "reason": "scraper produced no result"}
                 )
                 continue
+            raw_results.append({"keyword": keyword, "site": name, "payload": site_result.raw})
+            payload = site_result.filtered
             filtered_results.append({"keyword": keyword, "site": name, "payload": payload})
             if isinstance(payload, dict) and "error" in payload:
                 err: dict[str, Any] = {
@@ -750,7 +714,7 @@ def scrape_jobs(
 
     duration = time.monotonic() - t_start
     log.info(
-        "scrape_jobs done ok=%s errors=%d jobs=%d duration=%.1fs",
+        "scrape_jobs done ok={} errors={} jobs={} duration={:.1f}s",
         result["ok"],
         len(errors),
         total_jobs,
@@ -777,16 +741,61 @@ def scrape_jobs(
                 "note": note,
             }
         )
-        log.info("scrape_jobs: mongo insert ok id=%s", mongo_id)
+        log.info("scrape_jobs: mongo insert ok id={}", mongo_id)
     except Exception as exc:
-        log.error("scrape_jobs: mongo insert failed: %s", exc)
+        log.opt(exception=True).error("scrape_jobs: mongo insert failed: {}", exc)
+        # TODO: no durable fallback — a failed Mongo insert drops this run's
+        # results entirely (the output/ disk persistence was retired). Add a
+        # job-queue or event-log service to capture failed writes and replay
+        # them, so a transient Mongo outage doesn't lose scraped data.
 
     # immutable: build a new dict rather than mutating `result` (already passed to _write_status)
     return {**result, "mongo_id": mongo_id}
 
 
+def _build_app() -> Starlette:
+    """Build the streamable-http ASGI app with a process-level shutdown hook.
+
+    FastMCP wires ``FastMCP(lifespan=...)`` into the per-MCP-session low-level
+    server — for the streamable-http transport that fires per client session,
+    NOT when the process stops. To close shared resources on shutdown we compose
+    the Starlette app's OWN lifespan (the session manager) with a mongo close.
+    """
+    app = mcp.streamable_http_app()
+    inner = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def _composed(starlette_app: Starlette) -> AsyncIterator[None]:
+        log = _get_logger()
+        log.info("mcp server starting up")
+        try:
+            async with inner(starlette_app):
+                yield
+        finally:
+            log.info("mcp server shutting down; closing mongo client")
+            mongo.close()
+
+    app.router.lifespan_context = _composed
+    return app
+
+
 def main() -> None:
-    mcp.run(transport="streamable-http")
+    import uvicorn
+
+    _get_logger()  # configure loguru + install root InterceptHandler BEFORE uvicorn
+    init_sentry()  # attach Sentry's loguru sink AFTER loguru is configured
+
+    # Mirrors FastMCP.run_streamable_http_async (a thin uvicorn wrapper) but
+    # serves OUR app with the composed lifespan so mongo.close() runs at shutdown.
+    # log_config=None → uvicorn's loggers propagate to the root InterceptHandler
+    # (loguru) instead of uvicorn installing its own handlers.
+    uvicorn.run(
+        _build_app(),
+        host=HOST,
+        port=PORT,
+        log_level=mcp.settings.log_level.lower(),
+        log_config=None,
+    )
 
 
 if __name__ == "__main__":

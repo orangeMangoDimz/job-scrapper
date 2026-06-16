@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from scraper.runner import SiteRunResult
 from scraper.types import JOB_FIELD_ORDER
 
 
@@ -9,27 +10,41 @@ def _make_config(keyword: str = "data analyst", site: str = "jobstreet"):
     cfg = MagicMock()
     cfg.keywords = (keyword,)
     cfg.enabled_site_names.return_value = (site,)
-    cfg.output_dir = MagicMock()
     return cfg
 
 
+def _result(keyword, site, filtered, raw=None):
+    return SiteRunResult(
+        keyword=keyword,
+        site=site,
+        filtered=filtered,
+        raw=raw if raw is not None else {"keyword": keyword, "fields": [], "count": 0, "jobs": []},
+    )
+
+
 @patch("mcp_server.server.mongo")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output")
-@patch("mcp_server.server._read_site_output")
-def test_ok_true_when_zero_jobs(mock_read, mock_read_raw, mock_load, mock_run, mock_mongo):
+@patch("mcp_server.server.run_scraper")
+def test_ok_true_when_zero_jobs(mock_run, mock_load, mock_mongo):
     """0 jobs returned but fetch succeeded → ok must be True."""
     mock_load.return_value = _make_config()
-    mock_read_raw.return_value = None
-    mock_read.return_value = {
-        "keyword": "data analyst",
-        "fields": ["title"],
-        "count": 0,
-        "jobs": [],
-        "max_age_hours": 24,
-        "filter": None,
-    }
+    mock_run.return_value = (
+        0,
+        [
+            _result(
+                "data analyst",
+                "jobstreet",
+                {
+                    "keyword": "data analyst",
+                    "fields": ["title"],
+                    "count": 0,
+                    "jobs": [],
+                    "max_age_hours": 24,
+                    "filter": None,
+                },
+            )
+        ],
+    )
 
     from mcp_server.server import scrape_jobs
 
@@ -41,22 +56,28 @@ def test_ok_true_when_zero_jobs(mock_read, mock_read_raw, mock_load, mock_run, m
 
 
 @patch("mcp_server.server.mongo")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output")
-@patch("mcp_server.server._read_site_output")
-def test_ok_true_when_jobs_found(mock_read, mock_read_raw, mock_load, mock_run, mock_mongo):
+@patch("mcp_server.server.run_scraper")
+def test_ok_true_when_jobs_found(mock_run, mock_load, mock_mongo):
     """Jobs found → ok must be True."""
     mock_load.return_value = _make_config()
-    mock_read_raw.return_value = None
-    mock_read.return_value = {
-        "keyword": "data analyst",
-        "fields": ["title"],
-        "count": 2,
-        "jobs": [{"title": "A"}, {"title": "B"}],
-        "max_age_hours": 24,
-        "filter": None,
-    }
+    mock_run.return_value = (
+        0,
+        [
+            _result(
+                "data analyst",
+                "jobstreet",
+                {
+                    "keyword": "data analyst",
+                    "fields": ["title"],
+                    "count": 2,
+                    "jobs": [{"title": "A"}, {"title": "B"}],
+                    "max_age_hours": 24,
+                    "filter": None,
+                },
+            )
+        ],
+    )
 
     from mcp_server.server import scrape_jobs
 
@@ -68,19 +89,25 @@ def test_ok_true_when_jobs_found(mock_read, mock_read_raw, mock_load, mock_run, 
 
 
 @patch("mcp_server.server.mongo")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output")
-@patch("mcp_server.server._read_site_output")
-def test_ok_false_when_fetch_failed(mock_read, mock_read_raw, mock_load, mock_run, mock_mongo):
+@patch("mcp_server.server.run_scraper")
+def test_ok_false_when_fetch_failed(mock_run, mock_load, mock_mongo):
     """Fetch failed → ok must be False, error captured, sites list empty."""
     mock_load.return_value = _make_config()
-    mock_read_raw.return_value = None
-    mock_read.return_value = {
-        "error": "fetch failed",
-        "url": "https://example.com",
-        "keyword": "data analyst",
-    }
+    mock_run.return_value = (
+        0,
+        [
+            _result(
+                "data analyst",
+                "jobstreet",
+                {
+                    "error": "fetch failed",
+                    "url": "https://example.com",
+                    "keyword": "data analyst",
+                },
+            )
+        ],
+    )
 
     from mcp_server.server import scrape_jobs
 
@@ -93,15 +120,12 @@ def test_ok_false_when_fetch_failed(mock_read, mock_read_raw, mock_load, mock_ru
 
 
 @patch("mcp_server.server.mongo")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output")
-@patch("mcp_server.server._read_site_output")
-def test_ok_false_when_output_missing(mock_read, mock_read_raw, mock_load, mock_run, mock_mongo):
-    """Missing output file (None from _read_site_output) → ok False."""
+@patch("mcp_server.server.run_scraper")
+def test_ok_false_when_site_result_missing(mock_run, mock_load, mock_mongo):
+    """A requested (keyword, site) with no result from the scraper → ok False."""
     mock_load.return_value = _make_config()
-    mock_read_raw.return_value = None
-    mock_read.return_value = None
+    mock_run.return_value = (0, [])  # nothing came back for the requested pair
 
     from mcp_server.server import scrape_jobs
 
@@ -114,24 +138,28 @@ def test_ok_false_when_output_missing(mock_read, mock_read_raw, mock_load, mock_
 
 @patch("mcp_server.server.mongo")
 @patch("mcp_server.server._write_status")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output")
-@patch("mcp_server.server._read_site_output")
-def test_scrape_jobs_writes_status(
-    mock_read, mock_read_raw, mock_load, mock_run, mock_write_status, mock_mongo
-):
+@patch("mcp_server.server.run_scraper")
+def test_scrape_jobs_writes_status(mock_run, mock_load, mock_write_status, mock_mongo):
     """scrape_jobs must call _write_status exactly once after a run."""
     mock_load.return_value = _make_config()
-    mock_read_raw.return_value = None
-    mock_read.return_value = {
-        "keyword": "data analyst",
-        "fields": ["title"],
-        "count": 1,
-        "jobs": [{"title": "A"}],
-        "max_age_hours": None,
-        "filter": None,
-    }
+    mock_run.return_value = (
+        0,
+        [
+            _result(
+                "data analyst",
+                "jobstreet",
+                {
+                    "keyword": "data analyst",
+                    "fields": ["title"],
+                    "count": 1,
+                    "jobs": [{"title": "A"}],
+                    "max_age_hours": None,
+                    "filter": None,
+                },
+            )
+        ],
+    )
 
     from mcp_server.server import scrape_jobs
 
@@ -144,30 +172,34 @@ def test_scrape_jobs_writes_status(
 
 
 @patch("mcp_server.server.mongo")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output")
-@patch("mcp_server.server._read_site_output")
-def test_scrape_jobs_normalizes_jobs_to_canonical_schema(
-    mock_read, mock_read_raw, mock_load, mock_run, mock_mongo
-):
+@patch("mcp_server.server.run_scraper")
+def test_scrape_jobs_normalizes_jobs_to_canonical_schema(mock_run, mock_load, mock_mongo):
     mock_load.return_value = _make_config()
-    mock_read_raw.return_value = None
-    mock_read.return_value = {
-        "keyword": "data analyst",
-        "fields": ["title", "company", "url"],
-        "count": 1,
-        "jobs": [
-            {
-                "title": "Data Analyst",
-                "company": "ACME",
-                "url": "https://example.com/job/1",
-                "extra": "drop-me",
-            }
+    mock_run.return_value = (
+        0,
+        [
+            _result(
+                "data analyst",
+                "jobstreet",
+                {
+                    "keyword": "data analyst",
+                    "fields": ["title", "company", "url"],
+                    "count": 1,
+                    "jobs": [
+                        {
+                            "title": "Data Analyst",
+                            "company": "ACME",
+                            "url": "https://example.com/job/1",
+                            "extra": "drop-me",
+                        }
+                    ],
+                    "max_age_hours": 24,
+                    "filter": None,
+                },
+            )
         ],
-        "max_age_hours": 24,
-        "filter": None,
-    }
+    )
 
     from mcp_server.server import scrape_jobs
 
@@ -183,29 +215,34 @@ def test_scrape_jobs_normalizes_jobs_to_canonical_schema(
 
 
 @patch("mcp_server.server.mongo")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output")
-@patch("mcp_server.server._read_site_output")
-def test_scrape_jobs_returns_mongo_id_and_builds_document(
-    mock_read, mock_read_raw, mock_load, mock_run, mock_mongo
-):
+@patch("mcp_server.server.run_scraper")
+def test_scrape_jobs_returns_mongo_id_and_builds_document(mock_run, mock_load, mock_mongo):
     """One document per run: raw_results (all jobs) + filtered_results (cut-down) + per_site_counts."""
     mock_load.return_value = _make_config()
-    mock_read.return_value = {
-        "keyword": "data analyst",
-        "fields": ["title"],
-        "count": 2,
-        "jobs": [{"title": "A"}, {"title": "B"}],
-        "max_age_hours": 24,
-        "filter": None,
-    }
-    mock_read_raw.return_value = {
-        "keyword": "data analyst",
-        "fields": list(JOB_FIELD_ORDER),
-        "count": 5,
-        "jobs": [{"title": t} for t in "ABCDE"],
-    }
+    mock_run.return_value = (
+        0,
+        [
+            _result(
+                "data analyst",
+                "jobstreet",
+                filtered={
+                    "keyword": "data analyst",
+                    "fields": ["title"],
+                    "count": 2,
+                    "jobs": [{"title": "A"}, {"title": "B"}],
+                    "max_age_hours": 24,
+                    "filter": None,
+                },
+                raw={
+                    "keyword": "data analyst",
+                    "fields": list(JOB_FIELD_ORDER),
+                    "count": 5,
+                    "jobs": [{"title": t} for t in "ABCDE"],
+                },
+            )
+        ],
+    )
     mock_mongo.insert_run.return_value = "deadbeef"
 
     from mcp_server.server import scrape_jobs
@@ -222,17 +259,20 @@ def test_scrape_jobs_returns_mongo_id_and_builds_document(
 
 
 @patch("mcp_server.server.mongo")
-@patch("mcp_server.server.run_scraper", return_value=0)
 @patch("mcp_server.server._load_config")
-@patch("mcp_server.server._read_site_raw_output", return_value=None)
-@patch("mcp_server.server._read_site_output")
-def test_scrape_jobs_sets_note_on_error(mock_read, mock_read_raw, mock_load, mock_run, mock_mongo):
+@patch("mcp_server.server.run_scraper")
+def test_scrape_jobs_sets_note_on_error(mock_run, mock_load, mock_mongo):
     mock_load.return_value = _make_config()
-    mock_read.return_value = {
-        "error": "fetch failed",
-        "url": "https://x",
-        "keyword": "data analyst",
-    }
+    mock_run.return_value = (
+        0,
+        [
+            _result(
+                "data analyst",
+                "jobstreet",
+                {"error": "fetch failed", "url": "https://x", "keyword": "data analyst"},
+            )
+        ],
+    )
     mock_mongo.insert_run.return_value = "id1"
 
     from mcp_server.server import scrape_jobs

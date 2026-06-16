@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import Any
 
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
-_DB_NAME = os.environ.get("MONGO_DB_NAME", "job_scraper")
-_COLLECTION_NAME = os.environ.get("MONGO_COLLECTION_NAME", "scrape_runs")
-# Bound server selection so a down/unreachable Mongo fails fast (default 30s)
-# instead of stalling the /health probe past its curl timeout.
-_SERVER_SELECTION_TIMEOUT_MS = int(os.environ.get("MONGO_SERVER_SELECTION_TIMEOUT_MS", "3000"))
+from scraper import settings
 
 _client: Any = None
 
@@ -20,14 +14,22 @@ def _get_client() -> Any:
         from pymongo import MongoClient  # deferred so import cost is zero when unused
 
         _client = MongoClient(
-            MONGO_URI,
-            serverSelectionTimeoutMS=_SERVER_SELECTION_TIMEOUT_MS,
+            settings.MONGO_URI,
+            serverSelectionTimeoutMS=settings.MONGO_SERVER_SELECTION_TIMEOUT_MS,
         )
     return _client
 
 
 def get_collection() -> Any:
-    return _get_client()[_DB_NAME][_COLLECTION_NAME]
+    return _get_client()[settings.MONGO_DB_NAME][settings.MONGO_COLLECTION_NAME]
+
+
+def close() -> None:
+    """Close the shared client and reset it (graceful shutdown). Idempotent."""
+    global _client
+    if _client is not None:
+        _client.close()
+        _client = None
 
 
 def ping() -> None:

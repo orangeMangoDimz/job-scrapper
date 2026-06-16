@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
 import re
 import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from .. import settings
 from ..log import get_logger
 
 _LOG = get_logger()
@@ -173,23 +173,23 @@ def load_index_from_mongo() -> WilayahIndex | None:
         _LOG.warning("[location] pymongo unavailable; location filter degraded")
         return None
 
-    uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
-    db_name = os.environ.get("MONGO_DB_NAME", "job_scraper")
-    timeout = int(os.environ.get("MONGO_SERVER_SELECTION_TIMEOUT_MS", "3000"))
     try:
-        client = MongoClient(uri, serverSelectionTimeoutMS=timeout)
-        cursor = client[db_name]["wilayah"].find(
-            {"_id": {"$regex": _KODE_REGEX}}, {"_id": 1, "nama": 1}
-        )
-        index = build_index_from_rows((doc["_id"], doc.get("nama") or "") for doc in cursor)
+        with MongoClient(
+            settings.MONGO_URI,
+            serverSelectionTimeoutMS=settings.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+        ) as client:
+            cursor = client[settings.MONGO_DB_NAME]["wilayah"].find(
+                {"_id": {"$regex": _KODE_REGEX}}, {"_id": 1, "nama": 1}
+            )
+            index = build_index_from_rows((doc["_id"], doc.get("nama") or "") for doc in cursor)
     except Exception as exc:  # noqa: BLE001 - fail soft by design
-        _LOG.warning("[location] wilayah load failed (%s); location filter degraded", exc)
+        _LOG.warning("[location] wilayah load failed ({}); location filter degraded", exc)
         return None
     if not index.by_name:
         _LOG.warning("[location] wilayah collection empty; location filter degraded")
         return None
     _LOG.info(
-        "[location] wilayah index loaded: %d names, %d entries",
+        "[location] wilayah index loaded: {} names, {} entries",
         len(index.by_name),
         len(index.entries),
     )

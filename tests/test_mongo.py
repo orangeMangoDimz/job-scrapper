@@ -127,3 +127,21 @@ def test_update_run_does_not_mutate_input():
             original,
         )
     assert "_updated_at" not in original  # input patch must stay untouched
+
+
+def test_close_closes_and_resets_client():
+    from unittest.mock import MagicMock, patch
+
+    mock_client = MagicMock()
+    with patch.object(mongo_module, "_client", mock_client):
+        mongo_module.close()
+        mock_client.close.assert_called_once()
+    assert mongo_module._client is None
+
+
+def test_close_is_idempotent_when_no_client():
+    from unittest.mock import patch
+
+    with patch.object(mongo_module, "_client", None):
+        mongo_module.close()  # must not raise
+    assert mongo_module._client is None
