@@ -24,7 +24,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PATH=/home/pwuser/.local/bin:/usr/local/bin:/usr/bin:/bin
 
-RUN mkdir -p /app/output \
+RUN mkdir -p /app \
  && chown -R pwuser:pwuser /app
 
 COPY --from=builder --chown=pwuser:pwuser /root/.local /home/pwuser/.local
@@ -90,16 +90,12 @@ COPY --chown=node:node cron                   ./cron
 COPY --chown=node:node prompts                ./prompts
 COPY --chown=node:node claude/mcp.json.example ./.mcp.json
 
-RUN SCHEDULE="$(yq -r '.bot.schedule' /workspace/config.yaml)" \
- && echo "Generated cron schedule: $SCHEDULE" \
- && printf '%s /bin/sh /workspace/scraper-bot/cron/run-scraper.sh\n' "$SCHEDULE" \
-    > cron/scraper-crontab \
- && chmod +x cron/entrypoint.sh cron/run-scraper.sh \
+RUN chmod +x cron/entrypoint.sh cron/run-scraper.sh \
  && mkdir -p /home/node/.claude \
  && touch /home/node/.claude.json \
  && chown -R node:node /home/node /workspace
 
 USER node
 
-ENTRYPOINT ["/usr/local/bin/supercronic"]
-CMD ["/workspace/scraper-bot/cron/scraper-crontab"]
+ENTRYPOINT ["/workspace/scraper-bot/cron/entrypoint.sh"]
+CMD []

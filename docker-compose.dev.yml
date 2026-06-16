@@ -3,6 +3,7 @@ services:
   # Delete this to activate the cron schedule job.
   # Also mounts full config (base removed it; dev needs it, prod uses image-baked config).
   bot:
+    restart: "no"
     entrypoint: ["sleep"]
     command: ["infinity"]
     volumes:
@@ -10,5 +11,13 @@ services:
 
   # override: mount merged dev config
   scraper-mcp:
+    restart: "no"
+    environment:
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=plain   # human-readable locally; prod default is json
+      - LOG_FILE=/app/logs/scraper.log
     volumes:
       - /tmp/config.dev.yaml:/app/config.yaml
+
+  mongo:
+    restart: "no"

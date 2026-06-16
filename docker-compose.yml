@@ -1,14 +1,4 @@
 services:
-  # SERVICE: output-init — fixes output dir ownership before scraper runs (Playwright image runs as root)
-  output-init:
-    image: mcr.microsoft.com/playwright/python:v1.59.0-noble
-    container_name: job-scraper-init
-    user: "0:0"
-    entrypoint: ["sh", "-c", "chown -R pwuser:pwuser /out"]
-    restart: "no"
-    volumes:
-      - ./output:/out
-
   # SERVICE: scraper — one-shot CLI scraper; network_mode:host for SOCKS5 proxy passthrough
   # Disabled, this is just to test if the scraper works independently
   # scraper:
@@ -35,6 +25,7 @@ services:
     image: mongo:7
     container_name: job-scraper-mongo
     restart: unless-stopped
+    stop_grace_period: 30s
     profiles: ["mcp", "mongo"]
     ports:
       - "127.0.0.1:27017:27017"
@@ -59,10 +50,10 @@ services:
     image: job-scraper-mcp:latest
     container_name: job-scraper-mcp
     restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
     profiles: ["mcp"]
     depends_on:
-      output-init:
-        condition: service_completed_successfully
       mongo:
         condition: service_healthy
     healthcheck:
@@ -74,12 +65,19 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./output:/app/output
       - ./docs:/app/docs:ro
     environment:
       - MONGO_URI=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD}@mongo:27017
       - MONGO_DB_NAME=${MONGO_DB_NAME:-job_scraper}
       - MONGO_COLLECTION_NAME=${MONGO_COLLECTION_NAME:-scrape_runs}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-plain}
+      - LOG_FILE=${LOG_FILE:-}
+      - SENTRY_ENABLED=${SENTRY_ENABLED:-false}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+      - SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE:-0.0}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
 
   # SERVICE: bot — cron bot; runs claude-code on a schedule; profile-gated so `docker compose up` skips it by default
   bot:
@@ -90,20 +88,23 @@ services:
     image: job-scraper-bot:latest
     container_name: job-scraper-bot
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     profiles: ["bot"]
     extra_hosts:
       - "host.docker.internal:host-gateway" # allows bot to reach scraper-mcp via host.docker.internal:8080 (Linux only)
-    depends_on:
-      output-init:
-        condition: service_completed_successfully
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
       - TZ=${TZ:-Asia/Jakarta}
+      - BOT_SCHEDULE=${BOT_SCHEDULE:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-}
+      - BOT_LOG_FILE=${BOT_LOG_FILE:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-plain}
     volumes:
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/home/node/.claude
       - ${CLAUDE_CONFIG_FILE:-~/.claude.json}:/home/node/.claude.json
-      - ./output:/workspace/output
 
 volumes:
   mongo-data:

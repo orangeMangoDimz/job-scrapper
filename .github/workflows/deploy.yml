@@ -123,7 +123,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME
+          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME,LOG_LEVEL,LOG_FORMAT,SENTRY_ENABLED,SENTRY_DSN,SENTRY_ENVIRONMENT,SENTRY_TRACES_SAMPLE_RATE,SENTRY_RELEASE
           script: |
             set -euo pipefail
             cd ~/job-scrapper
@@ -141,6 +141,13 @@ jobs:
           MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
           MONGO_DB_NAME: ${{ vars.MONGO_DB_NAME || 'job_scraper' }}
           MONGO_COLLECTION_NAME: ${{ vars.MONGO_COLLECTION_NAME || 'scrape_runs' }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          LOG_FORMAT: ${{ vars.LOG_FORMAT || 'plain' }}
+          SENTRY_ENABLED: ${{ vars.SENTRY_ENABLED || 'false' }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT || 'production' }}
+          SENTRY_TRACES_SAMPLE_RATE: ${{ vars.SENTRY_TRACES_SAMPLE_RATE || '0.0' }}
+          SENTRY_RELEASE: ${{ github.sha }}
 
   # 4. SSH into VPS → pull new bot image → restart container (runs after build-bot + deploy-mcp)
   deploy-bot:
@@ -172,7 +179,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: BOT_IMAGE,DISCORD_BOT_TOKEN,DISCORD_CHANNEL_ID,CLAUDE_CONFIG_DIR,CLAUDE_CONFIG_FILE,TZ
+          envs: BOT_IMAGE,DISCORD_BOT_TOKEN,DISCORD_CHANNEL_ID,CLAUDE_CONFIG_DIR,CLAUDE_CONFIG_FILE,TZ,BOT_SCHEDULE,CLAUDE_MODEL
           script: |
             set -euo pipefail
             cd ~/job-scrapper
@@ -191,3 +198,5 @@ jobs:
           CLAUDE_CONFIG_DIR: ${{ vars.CLAUDE_CONFIG_DIR }}
           CLAUDE_CONFIG_FILE: ${{ vars.CLAUDE_CONFIG_FILE }}
           TZ: ${{ vars.TZ || 'Asia/Jakarta' }}
+          BOT_SCHEDULE: ${{ vars.BOT_SCHEDULE }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
