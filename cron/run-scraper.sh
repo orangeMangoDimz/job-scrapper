@@ -4,10 +4,21 @@
 # and the bot image's /bin/sh is dash — so no bashisms (e.g. ${PIPESTATUS}).
 LOG=/workspace/scraper-bot/cron/scraper.log
 PROMPT=/workspace/scraper-bot/prompts/scrape-and-post.md
+MCP_CONFIG=/workspace/scraper-bot/.mcp.json
 
 echo "[$(date)] starting multi-site scraper run..." | tee -a "$LOG"
 cd /workspace/scraper-bot
-# --dangerously-skip-permissions: needed for unattended cron — no TTY to approve prompts
+# --mcp-config: load the job-scraper MCP server explicitly. The image also bakes
+#   this file in as a project-scoped .mcp.json, but project-scoped servers need a
+#   trust approval recorded per project path in CLAUDE_CONFIG_FILE — and that file
+#   is seeded from a `claude login` on another machine, so the approval for
+#   /workspace/scraper-bot is not in it. Passing the config explicitly sidesteps
+#   the trust flow; without it the MCP tools can go missing and the run fails at
+#   Step 1 with nothing posted.
+# --strict-mcp-config: use ONLY the server above, so nothing inherited from the
+#   PV-backed config can shadow or interfere with it.
+# --dangerously-skip-permissions: needed for unattended cron — no TTY to approve
+#   prompts. Covers tool permission checks, not MCP project trust.
 # --verbose --output-format stream-json: emit one JSON event per step (tool calls,
 #   assistant messages, result) so the run's internals stream live to the log.
 #   Default text mode buffers and prints only the final result at the very end;
@@ -16,7 +27,9 @@ cd /workspace/scraper-bot
 # POSIX sh has no ${PIPESTATUS}, so route the real rc through a file.
 {
   claude \
-    --model claude-haiku-4-5-20251001 \
+    --model claude-sonnet-5 \
+    --mcp-config "$MCP_CONFIG" \
+    --strict-mcp-config \
     --dangerously-skip-permissions \
     --verbose \
     --output-format stream-json \

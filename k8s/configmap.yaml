@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: job-scraper-config
+data:
+  MONGO_DB_NAME: "job_scraper"
+  MONGO_COLLECTION_NAME: "scrape_runs"
+  MONGO_SERVER_SELECTION_TIMEOUT_MS: "3000"
+  TZ: "Asia/Jakarta"
+  MAX_CHARS: "1900"
+  CLAUDE_CONFIG_DIR: "/claude-config/.claude"
+  CLAUDE_CONFIG_FILE: "/claude-config/.claude.json"

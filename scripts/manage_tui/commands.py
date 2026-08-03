@@ -44,28 +44,19 @@ coll.drop()
 print("dropped _tui_healthcheck -- mongo OK")
 """
 
-# Copied verbatim from prompts/scrape-and-post.md (the bot's real send path):
-# reads token + channel + MSG from the container env, posts one message.
-_DISCORD_SEND_JS = """\
-const https = require('https');
-const body = JSON.stringify({content: process.env.MSG});
-const req = https.request({
-  hostname: 'discord.com',
-  path: '/api/v10/channels/' + process.env.DISCORD_CHANNEL_ID + '/messages',
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bot ' + process.env.DISCORD_BOT_TOKEN,
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body)
-  }
-}, res => {
-  let d=''; res.on('data',c=>d+=c);
-  res.on('end',()=>{const r=JSON.parse(d); console.log(r.id ? 'sent: '+r.id : 'error: '+JSON.stringify(r));});
-});
-req.write(body); req.end();
-"""
+# Writes a throwaway digest and posts it with cron/send-digest.js — the same
+# script the cron prompt calls, so this test can't drift from the real send path
+# the way an inlined copy of it did.
+_DISCORD_TEST_MESSAGE = "✅ manage.py TUI discord test — webhook reachable"
 
-_DISCORD_TEST_MESSAGE = "✅ manage.py TUI discord test — bot token + channel reachable"
+_DISCORD_SEND_SH = f"""\
+set -e
+printf '%s\\n' '**manage.py TUI test digest**' '' '## Test job' 'Test Co | Jakarta' \
+  > /tmp/tui-discord-test.md
+DIGEST_PATH=/tmp/tui-discord-test.md \
+DIGEST_SUMMARY='{_DISCORD_TEST_MESSAGE}' \
+  node /workspace/scraper-bot/cron/send-digest.js
+"""
 
 
 @dataclass(frozen=True)
@@ -202,19 +193,17 @@ def build_test(test: str) -> list[Command]:
             )
         ]
     if test == "discord":
-        # TOKEN + CHANNEL_ID already live in the bot container env; only MSG is
-        # injected here.
+        # DISCORD_WEBHOOK_URL already lives in the bot container env; the digest
+        # file and summary are built inside the container by the snippet.
         return [
             Command(
                 [
                     "docker",
                     "exec",
-                    "-e",
-                    f"MSG={_DISCORD_TEST_MESSAGE}",
                     _BOT_CONTAINER,
-                    "node",
-                    "-e",
-                    _DISCORD_SEND_JS,
+                    "/bin/sh",
+                    "-c",
+                    _DISCORD_SEND_SH,
                 ]
             )
         ]

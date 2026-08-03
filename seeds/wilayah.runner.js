@@ -11,7 +11,7 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-const DB_NAME = 'job_scraper';
+const DB_NAME = 'job-scraper';
 const COLL = 'wilayah';
 const EXPECTED = 91599;
 
@@ -24,6 +24,8 @@ async function main() {
 
   const client = new MongoClient(MONGO_URI);
   await client.connect();
+  
+  console.log(`[wilayah] connected to ${MONGO_URI} with user ${client.options.auth?.username}`);
 
   const coll = client.db(DB_NAME).collection(COLL);
 

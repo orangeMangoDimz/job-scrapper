@@ -46,6 +46,7 @@ class SiteConfig:
     max_age_hours: int | None = None
     filter: dict[str, list[str]] | None = None
     limit: int | None = None
+    max_pages: int | None = None
 
     def effective_fields(self, default: tuple[str, ...]) -> tuple[str, ...]:
         return self.fields if self.fields is not None else default
@@ -64,6 +65,10 @@ class AppConfig:
     max_age_hours: int | None
     filter: dict[str, list[str]]
     sites: tuple[SiteConfig, ...]
+    max_pages: int = 1
+    api_max_pages: int = 1
+    page_delay_sec: float = 0.0
+    requirements_max_chars: int | None = None
     proxy: ProxyConfig | None = None
 
     @property
@@ -103,6 +108,15 @@ class AppConfig:
         if cfg is not None and cfg.limit is not None:
             return cfg.limit
         return self.limit
+
+    def max_pages_for(self, site_name: str, api_backed: bool = False) -> int:
+        """Page budget for a site. An explicit per-site ``max_pages`` always wins;
+        otherwise API-backed sites (one cheap pooled request) use ``api_max_pages``
+        while HTML sites (one rate-limited fetch per page) use ``max_pages``."""
+        cfg = self.site(site_name)
+        if cfg is not None and cfg.max_pages is not None:
+            return cfg.max_pages
+        return self.api_max_pages if api_backed else self.max_pages
 
 
 def _slugify(keyword: str) -> str:
@@ -306,6 +320,17 @@ def load(path: Path) -> AppConfig:
             if site_limit < 1:
                 raise ConfigError(f"sites.{name}.limit must be >= 1, got {site_limit}")
 
+        site_max_pages: int | None = None
+        if "max_pages" in cfg and cfg["max_pages"] is not None:
+            try:
+                site_max_pages = int(cfg["max_pages"])
+            except (TypeError, ValueError) as exc:
+                raise ConfigError(
+                    f"sites.{name}.max_pages must be an integer, got {cfg['max_pages']!r}"
+                ) from exc
+            if site_max_pages < 1:
+                raise ConfigError(f"sites.{name}.max_pages must be >= 1, got {site_max_pages}")
+
         sites.append(
             SiteConfig(
                 name=name,
@@ -315,6 +340,7 @@ def load(path: Path) -> AppConfig:
                 max_age_hours=site_max_age,
                 filter=site_filter,
                 limit=site_limit,
+                max_pages=site_max_pages,
             )
         )
 
@@ -333,6 +359,49 @@ def load(path: Path) -> AppConfig:
         raise ConfigError(f"'concurrency' must be an integer, got {concurrency_raw!r}") from exc
     if concurrency < 1:
         raise ConfigError(f"'concurrency' must be >= 1, got {concurrency}")
+
+    max_pages_raw = raw.get("max_pages", 1)
+    try:
+        max_pages = int(max_pages_raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"'max_pages' must be an integer, got {max_pages_raw!r}") from exc
+    if max_pages < 1:
+        raise ConfigError(f"'max_pages' must be >= 1, got {max_pages}")
+
+    # API-backed sites default to a deeper pool than HTML sites (see max_pages_for).
+    api_max_pages_raw = raw.get("api_max_pages", max_pages)
+    try:
+        api_max_pages = int(api_max_pages_raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"'api_max_pages' must be an integer, got {api_max_pages_raw!r}") from exc
+    if api_max_pages < 1:
+        raise ConfigError(f"'api_max_pages' must be >= 1, got {api_max_pages}")
+
+    page_delay_raw = raw.get("page_delay_sec", 0.0)
+    try:
+        page_delay_sec = float(page_delay_raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(
+            f"'page_delay_sec' must be a number, got {page_delay_raw!r}"
+        ) from exc
+    if page_delay_sec < 0:
+        raise ConfigError(f"'page_delay_sec' must be >= 0, got {page_delay_sec}")
+
+    # Raw descriptions run to several thousand chars each and dominate the payload
+    # handed to the bot, which only renders a few bullets from them. Cap server-side.
+    requirements_max_chars: int | None = None
+    req_max_raw = raw.get("requirements_max_chars")
+    if req_max_raw is not None:
+        try:
+            requirements_max_chars = int(req_max_raw)
+        except (TypeError, ValueError) as exc:
+            raise ConfigError(
+                f"'requirements_max_chars' must be a positive integer or null, got {req_max_raw!r}"
+            ) from exc
+        if requirements_max_chars < 1:
+            raise ConfigError(
+                f"'requirements_max_chars' must be >= 1, got {requirements_max_chars}"
+            )
 
     output_dir = Path(str(raw.get("output_dir", "output")))
 
@@ -354,6 +423,10 @@ def load(path: Path) -> AppConfig:
         filter=global_filter,
         max_age_hours=max_age_hours,
         sites=tuple(sites),
+        max_pages=max_pages,
+        api_max_pages=api_max_pages,
+        page_delay_sec=page_delay_sec,
+        requirements_max_chars=requirements_max_chars,
         proxy=proxy,
     )
 

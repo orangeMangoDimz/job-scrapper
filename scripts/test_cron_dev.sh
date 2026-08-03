@@ -7,7 +7,7 @@ set -euo pipefail
 # container. Tears down the MCP stack on exit.
 #
 # Requires:
-#   .env                - must contain DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID,
+#   .env                - must contain DISCORD_WEBHOOK_URL,
 #                         MONGO_ROOT_PASSWORD (sourced automatically by this script)
 #   ~/.claude           - your local Claude Code session config dir
 #   ~/.claude.json      - your local Claude Code config file
@@ -46,8 +46,7 @@ set +a
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CLAUDE_CONFIG_FILE="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
 
-: "${DISCORD_BOT_TOKEN:?set DISCORD_BOT_TOKEN before running}"
-: "${DISCORD_CHANNEL_ID:?set DISCORD_CHANNEL_ID before running}"
+: "${DISCORD_WEBHOOK_URL:?set DISCORD_WEBHOOK_URL before running}"
 
 if [ ! -d "$CLAUDE_CONFIG_DIR" ]; then
   echo "ERROR: Claude config dir not found at $CLAUDE_CONFIG_DIR" >&2

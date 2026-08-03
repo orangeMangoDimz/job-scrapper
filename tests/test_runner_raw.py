@@ -18,7 +18,7 @@ def test_run_one_writes_raw_before_filter(tmp_path):
     scraper.limit = 5
     scraper.requires_search_html = True
     # 3 parsed jobs: 2 in jakarta, 1 in surabaya
-    scraper.parse.return_value = [
+    scraper.collect.return_value = [
         _job("A", "Jakarta"),
         _job("B", "Jakarta"),
         _job("C", "Surabaya"),
@@ -58,7 +58,7 @@ def test_run_one_resets_raw_on_fetch_failure(tmp_path):
     scraper.url = "https://example.test/search"
     scraper.limit = 5
     scraper.requires_search_html = True
-    scraper.parse.return_value = [_job("A", "Jakarta"), _job("B", "Jakarta")]
+    scraper.collect.return_value = [_job("A", "Jakarta"), _job("B", "Jakarta")]
 
     fetcher = MagicMock()
     fetcher.fetch.return_value.attempts = []

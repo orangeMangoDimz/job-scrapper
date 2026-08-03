@@ -5,9 +5,14 @@ import re
 from bs4 import BeautifulSoup
 
 from ..types import Job, empty_job
+from ._pagination import with_query_param
 from .base import Scraper
 
 _JOB_ID_RE = re.compile(r"/jobs/view/[^/]*?-?(\d{6,})(?:/|\?|$)")
+
+# LinkedIn's guest jobs API returns a fixed batch of cards per request; deeper
+# pages are requested by advancing the `start` offset.
+_LINKEDIN_PAGE_SIZE = 25
 
 
 def _extract_job_id(url: str | None) -> str | None:
@@ -19,6 +24,11 @@ def _extract_job_id(url: str | None) -> str | None:
 
 class LinkedinScraper(Scraper):
     name = "linkedin"
+
+    def page_url(self, page: int) -> str | None:
+        if page == 0:
+            return self.url
+        return with_query_param(self.url, "start", str(page * _LINKEDIN_PAGE_SIZE))
 
     def parse_detail(self, html: str) -> str | None:
         soup = BeautifulSoup(html, "lxml")

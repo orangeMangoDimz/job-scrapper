@@ -122,7 +122,8 @@ Because everything is baked in:
 | Change `keyword`, `limit`, `filter` | Edit `config.yaml` → push to `main` |
 | Change cron schedule | Edit `bot.schedule` in `config.yaml` → push to `main` (bot Dockerfile reads it via `yq` at build time) |
 | Change Discord message format | Edit `bot.message_template` in `config.yaml` → push to `main` (read fresh each run, no rebuild needed) |
-| Change Discord per-message cap | Edit `bot.max_chars` in `config.yaml` → push to `main` |
+| Change Discord per-message cap | Edit `MAX_CHARS` in `k8s/configmap.yaml` (or `.env`) → affects only the inline fallback; the normal path posts one attachment |
+| Change the Discord upload cap | Set `MAX_FILE_BYTES` (default 10 MiB, Discord's non-boosted limit; raise to 50/100 MiB on a boosted guild) |
 | Change Discord channel | Update `DISCORD_CHANNEL_ID` GitHub secret → push to main (or manual deploy) |
 | Change bot prompt | Edit `prompts/scrape-and-post.md` → push to `main` |
 | Rotate Discord bot token | Update `DISCORD_BOT_TOKEN` secret → push to main |

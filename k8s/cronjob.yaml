@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: job-scraper-bot
+spec:
+  schedule: "0 20 * * *"
+  timeZone: "Asia/Jakarta"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: job-scraper-bot
+              image: replacedbycicd
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - /workspace/scraper-bot/cron/run-scraper.sh
+              envFrom:
+                - configMapRef:
+                    name: job-scraper-config
+                - secretRef:
+                    name: job-scraper-secret
+              volumeMounts:
+                - name: claude-config
+                  mountPath: /claude-config
+          volumes:
+            - name: claude-config
+              persistentVolumeClaim:
+                claimName: job-scraper-claude-pvc
+          restartPolicy: OnFailure

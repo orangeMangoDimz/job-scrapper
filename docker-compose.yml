@@ -97,8 +97,8 @@ services:
       output-init:
         condition: service_completed_successfully
     environment:
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
-      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - MAX_CHARS=${MAX_CHARS:-1900}
       - TZ=${TZ:-Asia/Jakarta}
     volumes:
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/home/node/.claude

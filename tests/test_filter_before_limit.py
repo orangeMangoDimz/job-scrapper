@@ -44,7 +44,7 @@ def test_content_filter_runs_before_cap(tmp_path: Path):
     scraper.url = "https://www.linkedin.com/jobs/search?keywords=x"
     scraper.requires_search_html = True
     scraper.limit = 2
-    scraper.parse = MagicMock(return_value=jobs)
+    scraper.collect = MagicMock(return_value=jobs)
 
     run_one(
         scraper=scraper,
@@ -77,7 +77,7 @@ def test_max_age_runs_before_cap(tmp_path: Path):
     scraper.url = "https://www.linkedin.com/jobs/search?keywords=x"
     scraper.requires_search_html = True
     scraper.limit = 2
-    scraper.parse = MagicMock(return_value=jobs)
+    scraper.collect = MagicMock(return_value=jobs)
 
     run_one(
         scraper=scraper,

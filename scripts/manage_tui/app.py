@@ -29,8 +29,7 @@ from .runner import SequenceRunner
 _SUMMARY_ENV_KEYS = (
     "MONGO_ROOT_USER",
     "MONGO_ROOT_PASSWORD",
-    "DISCORD_CHANNEL_ID",
-    "DISCORD_BOT_TOKEN",
+    "DISCORD_WEBHOOK_URL",
 )
 _PREVIEW_HINT = "(focus an action — Tab/arrows — to preview its command)"
 

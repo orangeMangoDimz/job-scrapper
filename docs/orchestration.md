@@ -41,7 +41,9 @@ plugin during initial pairing.
 | `cron/entrypoint.sh` | downloads supercronic on first boot, exec's it |
 | `cron/run-scraper.sh` | runs `claude --verbose --output-format stream-json -p "$(cat prompts/scrape-and-post.md)"` (streams step events live to the log) |
 | `cron/scraper-crontab` | the schedule (default: `0 1 * * *` — daily at 01:00) |
-| `prompts/scrape-and-post.md` | the prompt Claude reads each tick — calls MCP tool, formats, posts |
+| `cron/send-digest.js` | uploads the digest to the webhook — splitting, retries, inline fallback |
+| `cron/send-digest.test.js` | `node --test` cover for the above, against a localhost stub |
+| `prompts/scrape-and-post.md` | the prompt Claude reads each tick — calls MCP tool, formats, builds the digest |
 | `claude/mcp.json.example` | project-level MCP registry template (rename to `.mcp.json` when copying to VPS) |
 | `.env.example` | required env vars for VPS deployment |
 
@@ -138,8 +140,9 @@ bot:
 | Setting | When it's read | Effect |
 |---|---|---|
 | `bot.schedule` | Bot image build time (yq → crontab) | Cron cadence supercronic uses |
-| `bot.max_chars` | Each prompt run (Claude reads via yq) | Truncates messages above this length |
-| `bot.message_template` | Each prompt run | Format applied to every job |
+| `MAX_CHARS` (env) | Each run, by `cron/send-digest.js` | Per-message cap for the **inline fallback only** — the normal attachment path has no character budget |
+| `MAX_FILE_BYTES` (env) | Each run, by `cron/send-digest.js` | Upload cap before the digest splits; default 10 MiB |
+| `prompts/response_template.md` | Each prompt run | Format applied to every job |
 
 Schedule examples (standard cron + supercronic shorthand):
 
@@ -166,22 +169,28 @@ without further work.
 
 ## Discord posting
 
-The prompt instructs Claude to:
+The run's jobs are delivered as **one markdown attachment**, not as a stream of
+messages. The prompt formats every job into `/tmp/jobs-YYYY-MM-DD.md` and hands
+the path to `cron/send-digest.js`, which owns everything after that:
 
-1. Read the bot token from `/home/node/.claude/channels/discord/.env`
-   (saved there by `/discord:configure` during pairing)
-2. POST each job as a separate message to the channel ID supplied by the
-   `DISCORD_CHANNEL_ID` environment variable (set in the bot container's
-   env via your `personal-bots/.env`)
-3. Use Node's `https` module via `node -e` to keep token in env vars,
-   never inlined in shell
+| Concern | Behaviour |
+|---|---|
+| Transport | One `multipart/form-data` POST to `DISCORD_WEBHOOK_URL` — `payload_json` (the summary line) + `files[0]` (the digest) |
+| Size | Measures **bytes**, not chars. Over `MAX_FILE_BYTES` (default 10 MiB) the digest splits at job boundaries into `…partNofM.md`, one message each — the cap applies per request, so parts can't share a POST |
+| Rate limits | HTTP 429 → sleep `retry_after` from the body, up to 3 attempts; 5xx → one retry after 2s; ~1s between messages |
+| Fallback | A part that still fails is chunked into `MAX_CHARS` plain `content` messages — the old per-message batching, now in code rather than in the prompt |
+| Reporting | Prints `RESULT {"mode":…,"messages_sent":…,"parts":…,"bytes":…,"failed":…}`; the prompt copies those numbers into the MongoDB run document, including `delivery_mode` so a degraded run is visible afterwards |
 
-To change the Discord channel, set `DISCORD_CHANNEL_ID` in your
-`personal-bots/.env` and restart the bot container.
+A file upload answers **200 with a message object**, unlike a plain content POST
+which answers `204 No Content` — the script keys success off any 2xx.
 
-To change the bot, re-pair via `/discord:configure` and restart the bot
-container so the new token in `/home/node/.claude/channels/discord/.env`
-is picked up.
+Tradeoff worth knowing: Discord does not render an attached `.md` as rich
+markdown. It shows a file card with a text preview, and links only become
+clickable once the file is opened. That is the price of collapsing a dozen
+messages into one.
+
+To change the destination, update `DISCORD_WEBHOOK_URL` in the Secret
+(`k8s/secret.yaml`) or your `.env`, and restart the bot.
 
 ## How `scraper-mcp` is reached
 
@@ -207,8 +216,9 @@ add the entry to `${CLAUDE_CONFIG_FILE}` (the `.claude.json` you mount).
 | Container restarts on healthcheck failure | supercronic process not running | Check `cron/scraper.log` for crontab parse errors |
 | Cron fires but Claude exits with `mcp not found` | `.mcp.json` not in scope | Verify `claude -p` is run with cwd = workspace dir; or add to global `.claude.json` |
 | Claude logs `connection refused: host.docker.internal:8080` | scraper-mcp not running, or `extra_hosts` missing from bot compose | `docker ps` to confirm scraper-mcp is up on host port 8080; verify `extra_hosts: ["host.docker.internal:host-gateway"]` is in the bot service |
-| Discord post fails with 401 | Bot token not saved at `/home/node/.claude/channels/discord/.env` | Re-run `/discord:configure <token>` on the user's host Claude session |
-| Discord post fails with 403 | Bot lacks send-messages perm in channel | Re-invite bot with the right OAuth scopes |
+| Digest upload fails with 401/404 | Webhook deleted or `DISCORD_WEBHOOK_URL` wrong/truncated | Re-create the webhook in channel settings, update the Secret, restart |
+| Digest upload fails with 413 | File over the guild's upload cap | Lower `MAX_FILE_BYTES` to match the guild's tier so the digest splits sooner |
+| Jobs arrive as plain messages, `delivery_mode: "inline"` | Every upload attempt failed; the fallback carried the run | Check the `upload of … failed:` lines in `cron/scraper.log` for the status code |
 | Cron never fires | Bad crontab syntax | `docker exec scraper-bot /workspace/scraper-bot/cron/supercronic -test /workspace/scraper-bot/cron/scraper-crontab` |
 
 ## Cost considerations

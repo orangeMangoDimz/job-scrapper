@@ -1,9 +1,9 @@
 keywords:
-  # - full stack engineer
+  - full stack engineer
   - software engineer
   - ai engineer
   - mobile engineer
-  - back end engineer
+  - backend engineer
   # - project manager
   # - product owner
   # - quality assurance
@@ -15,24 +15,28 @@ limit: 3
 concurrency: 2
 output_dir: output
 
-# socks5://host:port or http://host:port — comment out for direct connection
-proxy: "socks5://localhost:1080"
+# Dedup pagination: gather candidate jobs, keep only those not seen in previous
+# runs, until `limit` NEW jobs are collected per (site, keyword). The page budget
+# differs by fetch strategy:
+#   max_pages     — HTML-scraped sites (LinkedIn): one real, rate-limited HTTP
+#                   fetch per page, so keep modest. page_delay_sec spaces them out.
+#   api_max_pages — API-backed sites (JobStreet, Glints, Indeed): a single pooled
+#                   request (pageSize = limit * budget, capped 100), so a deeper
+#                   new-jobs search is cheap — set this higher.
+# A per-site `max_pages` under `sites:` overrides both.
+max_pages: 3
+api_max_pages: 10
+page_delay_sec: 1.5
+
+# socks5://host:port or http://host:port — commented out for direct connection
+# (deployed on a homeserver with a residential IP; no proxy/tunnel needed)
+# proxy: "socks5://localhost:1080"
 
 bot:
+  # Informational only — the k8s CronJob (k8s/cronjob.yaml) is the source of truth
+  # for the schedule. MAX_CHARS is now an env var and the Discord message template
+  # lives in docs/response_template.md.
   schedule: "0 11 * * *"
-  max_chars: 1900
-  message_template: |
-    ## {title}
-    {company} | {location}
-
-    **Details**
-    Link: [link]({url})
-    Source: {site}
-    Diposting: {posted_date}
-
-  # Use this inside "message_template" to display the requirements
-  # **Requirements**:
-  # {requirements}
 
 # jobs older than this are dropped; pair with URL param windows per site
 max_age_hours: 72
@@ -41,6 +45,10 @@ filter:
   location: [jakarta, tangerang, tangerang selatan, bandung, bekasi, Indonesia]
   # employment_type: [full-time, internship, contract, part-time]
   # work_type: [remote, hybrid, onsite]
+
+# Raw job descriptions run to ~2.5k chars each (9k observed) and are ~80% of the
+# payload handed to the bot, which only renders a few bullets. Cap them server-side.
+requirements_max_chars: 600
 
 # anchors (site, matched_keyword, title, company, url) always included
 default_fields:
@@ -51,6 +59,8 @@ default_fields:
   - salary
   - posted_date
   - posted_at
+  - work_type
+  - employment_type
   - requirements
 
 sites:
@@ -72,6 +82,7 @@ sites:
       - posted_date
       - posted_at
       - work_type
+      - employment_type
       - experience_level
       - requirements
 

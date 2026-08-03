@@ -4,7 +4,8 @@ Personal job scraper for Indonesian job boards (JobStreet, Glints, LinkedIn,
 Indeed). Flow: a Playwright/Python scraper is exposed as an **MCP HTTP server**
 (`scraper-mcp`, port 8080); a **Discord cron bot** (claude-code + supercronic)
 runs on a schedule, calls the MCP `scrape_jobs` tool, formats results, posts
-each job to a Discord channel, and records the run in **MongoDB**.
+them to a Discord channel as a single markdown digest attachment, and records
+the run in **MongoDB**.
 
 Four Dockerfile stages: `scraper-cli` (`python -m scraper`),
 `mcp-server` (`python -m mcp_server.server`), `bot`, plus `mongo` (MongoDB 7).
@@ -451,7 +452,7 @@ Then run `/mcp` to list available servers and tools. The MCP server exposes:
 | ----------- | ------------------------------------------------------------------------------------------- |
 | **Scrape**  | Runs `python -m scraper` in `scraper-mcp` — scrape only, no Mongo write, no Discord post    |
 | **Mongo**   | Inserts + reads + drops a throwaway document in `scraper-mcp` via the real Mongo connection |
-| **Discord** | Posts one test message to your Discord channel from the bot container                       |
+| **Discord** | Posts a throwaway digest via `cron/send-digest.js` from the bot container — the real send path |
 | **Cron**    | Fires the full cron job once (`run-scraper.sh`) — real scrape + real Discord posts          |
 
 # The scraping prompt (prompts/scrape-and-post.md)
@@ -462,15 +463,19 @@ scrape-and-post pipeline:
 1. **Scrape** — call MCP `scrape_jobs` with no arguments; runs every enabled site
    for every configured keyword using `config.yaml` filters and returns aggregated
    results grouped by keyword → site → jobs
-2. **Read formatting config** — extract `bot.message_template` and `bot.max_chars`
-   from `/workspace/config.yaml` using `yq`
+2. **Read the message template** — `prompts/response_template.md`, read fresh
+   every run
 3. **Format each job** — substitute `{field}` placeholders in the template; drop
    lines where the field is null; reformat ISO dates; distil `{requirements}` down
    to candidate-facing bullet points only
-4. **Post to Discord** — one API call per job via `node` + Discord REST v10;
-   token and channel ID come from the container's env vars, never inlined
-5. **Summary footer** — one final message with total job count, keywords, sites,
-   errors (skipped if zero jobs)
+4. **Assemble the digest** — every formatted job goes into one markdown file
+   (`/tmp/jobs-YYYY-MM-DD.md`), keywords as `#` sections
+5. **Post to Discord** — a single webhook POST via `cron/send-digest.js`: the
+   digest rides as a `.md` attachment, the message body carries only the summary
+   line and any error diagnostic. The script splits the file if it exceeds the
+   10 MiB upload cap, honours 429 `retry_after`, and falls back to inline
+   `MAX_CHARS` messages if uploads keep failing. The webhook URL comes from the
+   container env, never inlined
 6. **Record run** — call MCP `insert_scrape_run` with metadata, per-site counts,
    raw results, and post status; job posting always takes priority over history
    recording

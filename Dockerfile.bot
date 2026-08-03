@@ -1,0 +1,28 @@
+# Scheduled bot: node + claude-code. Runs one scrape+post via claude on each
+# invocation. Scheduling is owned by the k8s CronJob (k8s/cronjob.yaml), so this
+# image no longer bundles supercronic or bakes a crontab.
+FROM node:22-slim AS bot
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates tzdata \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g @anthropic-ai/claude-code
+
+WORKDIR /workspace/scraper-bot
+
+COPY --chown=node:node ./cron                      ./cron
+COPY --chown=node:node ./prompts                   ./prompts
+COPY --chown=node:node ./prompts/response_template.md ./prompts/response_template.md
+COPY --chown=node:node ./claude/mcp.json.example   ./.mcp.json
+
+RUN chmod +x cron/entrypoint.sh cron/run-scraper.sh \
+ && mkdir -p /home/node/.claude \
+ && touch /home/node/.claude.json \
+ && chown -R node:node /home/node /workspace
+
+USER node
+
+# CronJob overrides this with an explicit command; kept as a sane default so the
+# image also runs a single scrape when invoked directly.
+CMD ["/bin/sh", "/workspace/scraper-bot/cron/run-scraper.sh"]

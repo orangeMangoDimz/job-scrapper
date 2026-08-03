@@ -2,7 +2,7 @@
   "mcpServers": {
     "job-scraper": {
       "type": "http",
-      "url": "http://host.docker.internal:8080/mcp"
+      "url": "http://job-scraper-mcp-service/mcp"
     }
   }
 }

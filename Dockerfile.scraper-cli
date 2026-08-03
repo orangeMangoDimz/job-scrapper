@@ -1,0 +1,6 @@
+# One-shot CLI scraper (local testing / debugging).
+# Requires the shared base built first:  docker build -f Dockerfile.base -t job-scraper-base .
+FROM dta32/job-scrapper-orangemangodimz-base:v1.0.0 AS scraper-cli
+
+ENTRYPOINT ["python", "-m", "scraper"]
+CMD []

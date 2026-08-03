@@ -60,7 +60,7 @@ def test_run_one_skips_bail_for_indeed_style_scraper(tmp_path: Path):
         "posted_at": None,
         "posted_date": None,
     }
-    scraper.parse = MagicMock(return_value=[fake_job])
+    scraper.collect = MagicMock(return_value=[fake_job])
     fetcher = _make_fetcher(html=None)
 
     run_one(
@@ -73,7 +73,7 @@ def test_run_one_skips_bail_for_indeed_style_scraper(tmp_path: Path):
         content_filter={},
     )
 
-    scraper.parse.assert_called_once_with("")
+    scraper.collect.assert_called_once_with("")
     out = json.loads((tmp_path / "indeed.json").read_text())
     assert out["count"] == 1
     assert out["jobs"][0]["title"] == "API job"

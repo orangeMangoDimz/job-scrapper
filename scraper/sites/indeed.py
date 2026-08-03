@@ -181,11 +181,16 @@ def _fetch_jobs_from_api(keyword: str, where: str, limit: int) -> list[dict]:
 class IndeedScraper(Scraper):
     name = "indeed"
     requires_search_html = False
+    api_backed = True
 
     def parse(self, html: str) -> list[Job]:
         keyword, where = _extract_search_params(self.url)
         country = _country_from_url(self.url)
-        jobs_data = _fetch_jobs_from_api(keyword, where, self.limit)
+        # Indeed's GraphQL has no offset/cursor, so instead of paginating we fetch
+        # a larger pool in one call (capped at 100 by the API) — the runner then
+        # dedups it against previously-seen jobs and keeps up to `limit` new ones.
+        pool = max(1, min(self.limit * self.max_pages, 100))
+        jobs_data = _fetch_jobs_from_api(keyword, where, pool)
         _LOG.info(
             "[indeed-api] keyword=%r where=%r returned %d job(s)",
             keyword,
@@ -236,6 +241,6 @@ class IndeedScraper(Scraper):
             job["posted_date"] = posted_at
             job["requirements"] = description
             results.append(job)
-            if len(results) >= self.limit:
+            if len(results) >= pool:
                 break
         return results

@@ -6,14 +6,12 @@ set -euo pipefail
 # then fires `cron/run-scraper.sh` directly inside a one-shot bot container.
 # Requires:
 #
-#   DISCORD_BOT_TOKEN   - bot token with Send Messages perm in target channel
-#   DISCORD_CHANNEL_ID  - channel ID to post into
+#   DISCORD_WEBHOOK_URL - Discord webhook URL to post into
 #   ~/.claude           - your local Claude Code session config dir
 #   ~/.claude.json      - your local Claude Code config file
 #
 # Usage:
-#   export DISCORD_BOT_TOKEN=...
-#   export DISCORD_CHANNEL_ID=...
+#   export DISCORD_WEBHOOK_URL=...
 #   ./scripts/test-locally.sh
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,8 +24,7 @@ if [ -f "$REPO_ROOT/.env" ]; then
   set -a && source "$REPO_ROOT/.env" && set +a
 fi
 
-: "${DISCORD_BOT_TOKEN:?set DISCORD_BOT_TOKEN before running}"
-: "${DISCORD_CHANNEL_ID:?set DISCORD_CHANNEL_ID before running}"
+: "${DISCORD_WEBHOOK_URL:?set DISCORD_WEBHOOK_URL before running}"
 
 if ! command -v yq &>/dev/null; then
   echo "ERROR: yq not found — install it first: https://github.com/mikefarah/yq" >&2

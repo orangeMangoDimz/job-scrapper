@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-scraper-mcp
+  labels:
+    app: job-scraper-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: job-scraper-mcp
+  template:
+    metadata:
+      labels:
+        app: job-scraper-mcp
+    spec:
+      containers:
+        - name: job-scraper-mcp
+          image: replacedbycicd
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: job-scraper-config
+            - secretRef:
+                name: job-scraper-secret
