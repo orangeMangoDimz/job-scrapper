@@ -51,6 +51,10 @@ default_fields:
   - salary
   - posted_date
   - posted_at
+  - work_type
+  - employment_type
+  - experience_level
+  - job_id
   - requirements
 
 sites:
@@ -63,31 +67,12 @@ sites:
     enabled: true
     limit: 3
     url_template: "https://glints.com/id/opportunities/jobs/explore?keyword={keyword}&country=ID&sortBy=LATEST"
-    fields:
-      - title
-      - company
-      - location
-      - url
-      - salary
-      - posted_date
-      - posted_at
-      - work_type
-      - experience_level
-      - requirements
 
   linkedin:
     enabled: true
     limit: 3
     # guest API ignores sortBy=DD (verified); f_TPR is the real recency lever. Kept for convention.
     url_template: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={keyword}&location=Indonesia&f_TPR=r86400&sortBy=DD&start=0"
-    fields:
-      - title
-      - company
-      - location
-      - url
-      - posted_date
-      - posted_at
-      - requirements
 
   indeed:
     enabled: true
