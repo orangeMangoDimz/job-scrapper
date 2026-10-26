@@ -3,6 +3,7 @@ from __future__ import annotations
 from bs4 import BeautifulSoup
 
 from ..types import Job, empty_job
+from ._markdown import html_to_markdown
 from ._next_data import extract_next_data, walk_dicts
 from .base import Scraper
 
@@ -100,8 +101,9 @@ class JobstreetScraper(Scraper):
             for candidate in candidates:
                 for key in ("requirements", "jobDescription", "description"):
                     value = candidate.get(key)
-                    if isinstance(value, str) and value.strip():
-                        return value.strip()
+                    text = html_to_markdown(value) if isinstance(value, str) else None
+                    if text:
+                        return text
         soup = BeautifulSoup(html, "lxml")
         for selector in (
             "[data-automation='jobAdDetails']",
@@ -110,7 +112,7 @@ class JobstreetScraper(Scraper):
         ):
             el = soup.select_one(selector)
             if el:
-                text = el.get_text("\n", strip=True)
+                text = html_to_markdown(str(el))
                 if text:
                     return text
         return None
@@ -128,8 +130,10 @@ class JobstreetScraper(Scraper):
         candidates: list[dict] = []
         walk_dicts(
             data,
-            lambda d: ("jobTitle" in d or "title" in d)
-            and ("companyName" in d or "advertiser" in d or "company" in d),
+            lambda d: (
+                ("jobTitle" in d or "title" in d)
+                and ("companyName" in d or "advertiser" in d or "company" in d)
+            ),
             candidates,
         )
         results: list[Job] = []

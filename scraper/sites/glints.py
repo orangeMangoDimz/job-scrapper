@@ -6,6 +6,7 @@ import re
 from bs4 import BeautifulSoup
 
 from ..types import Job, empty_job
+from ._markdown import html_to_markdown
 from ._next_data import extract_next_data, walk_dicts
 from .base import Scraper
 
@@ -43,7 +44,7 @@ def _description_from_jsonld(html: str) -> str | None:
                 continue
             description = entry.get("description")
             if isinstance(description, str) and description.strip():
-                return BeautifulSoup(description, "lxml").get_text("\n", strip=True)
+                return html_to_markdown(description)
     return None
 
 
@@ -151,13 +152,14 @@ class GlintsScraper(Scraper):
             for candidate in candidates:
                 for key in ("description", "requirements", "jobDescription"):
                     value = candidate.get(key)
-                    if isinstance(value, str) and value.strip():
-                        return value.strip()
+                    text = html_to_markdown(value) if isinstance(value, str) else None
+                    if text:
+                        return text
         soup = BeautifulSoup(html, "lxml")
         for selector in (".JobDescription", "[class*='description']", ".job-description"):
             el = soup.select_one(selector)
             if el:
-                text = el.get_text("\n", strip=True)
+                text = html_to_markdown(str(el))
                 if text:
                     return text
         return None
