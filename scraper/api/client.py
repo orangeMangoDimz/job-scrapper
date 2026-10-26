@@ -10,6 +10,8 @@ _IMPERSONATE = "chrome131"
 _TIMEOUT_SECONDS = 30
 _ERROR_BODY_CHARS = 200
 DEFAULT_DELAY_SECONDS: tuple[float, float] = (1.0, 2.0)
+# requirements/detail calls run in a thread pool; a short pause keeps them paced but fast
+DETAIL_DELAY_SECONDS: tuple[float, float] = (0.3, 0.6)
 
 
 class ApiError(Exception):

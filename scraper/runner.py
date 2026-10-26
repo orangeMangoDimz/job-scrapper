@@ -5,12 +5,13 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
-from .api.client import ApiClient, ApiError
+from .api.client import DETAIL_DELAY_SECONDS, ApiClient, ApiError
 from .api.registry import API_SOURCES
-from .api.source import search_all
-from .config_loader import ALLOWED_URL_HOSTS, AppConfig, keyword_slug
+from .api.source import ApiSource, search_all
+from .config_loader import ALLOWED_URL_HOSTS, ApiConfig, AppConfig, keyword_slug
 from .fetchers import (
     CloudscraperFetcher,
     CurlCffiFetcher,
@@ -293,6 +294,33 @@ def run_one(
     _LOG.info("[%s] wrote %s", label, json_path.name)
 
 
+def build_api_callbacks(
+    source_factory: Callable[[Any], ApiSource],
+    api_cfg: ApiConfig,
+    keyword: str,
+    *,
+    proxy_url: str | None,
+    max_age_hours: int | None,
+    limit: int,
+    client_factory: Callable[..., Any] = ApiClient,
+) -> tuple[Callable[[], list[Job]], Callable[[Job], str | None]]:
+    """Search and detail get separate clients: search keeps the site's pace (LinkedIn needs
+    4-6s), detail calls for many jobs use a short pause so a run does not take minutes."""
+    search_client = (
+        client_factory(proxy=proxy_url, delay=api_cfg.delay_seconds)
+        if api_cfg.delay_seconds is not None
+        else client_factory(proxy=proxy_url)
+    )
+    search_source = source_factory(search_client)
+    detail_source = source_factory(client_factory(proxy=proxy_url, delay=DETAIL_DELAY_SECONDS))
+    locations, country_wide = api_cfg.locations, api_cfg.country_wide
+
+    def _search() -> list[Job]:
+        return search_all(search_source, keyword, locations, country_wide, max_age_hours, limit)
+
+    return _search, detail_source.detail
+
+
 def _select_targets(config: AppConfig, requested: Iterable[str]) -> list[str]:
     requested_list = list(requested)
     if requested_list:
@@ -361,20 +389,14 @@ def run(
         api_detail: Callable[[Job], str | None] | None = None
         api_cfg = site_cfg.api
         if api_cfg is not None and api_cfg.enabled and name in API_SOURCES:
-            client = (
-                ApiClient(proxy=proxy_url, delay=api_cfg.delay_seconds)
-                if api_cfg.delay_seconds is not None
-                else ApiClient(proxy=proxy_url)
+            api_search, api_detail = build_api_callbacks(
+                API_SOURCES[name],
+                api_cfg,
+                keyword,
+                proxy_url=proxy_url,
+                max_age_hours=config.max_age_for(name),
+                limit=config.limit_for(name),
             )
-            api_source = API_SOURCES[name](client)
-            locations, country_wide = api_cfg.locations, api_cfg.country_wide
-            max_age, limit = config.max_age_for(name), config.limit_for(name)
-
-            def _search_api() -> list[Job]:
-                return search_all(api_source, keyword, locations, country_wide, max_age, limit)
-
-            api_search = _search_api
-            api_detail = api_source.detail
         run_one(
             scraper,
             fetcher,
