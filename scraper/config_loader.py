@@ -38,6 +38,15 @@ class ProxyConfig:
 
 
 @dataclass(frozen=True)
+class ApiConfig:
+    enabled: bool
+    locations: tuple[str, ...]
+    country_wide: bool
+    # (min, max) jittered pause between this site's API calls; None = client default
+    delay_seconds: tuple[float, float] | None = None
+
+
+@dataclass(frozen=True)
 class SiteConfig:
     name: str
     enabled: bool
@@ -46,6 +55,7 @@ class SiteConfig:
     max_age_hours: int | None = None
     filter: dict[str, list[str]] | None = None
     limit: int | None = None
+    api: ApiConfig | None = None
 
     def effective_fields(self, default: tuple[str, ...]) -> tuple[str, ...]:
         return self.fields if self.fields is not None else default
@@ -252,6 +262,39 @@ def _resolve_keywords(raw: dict) -> tuple[str, ...]:
     raise ConfigError("config must define non-empty 'keywords' (list) or 'keyword' (string)")
 
 
+def _parse_api(raw: object, source: str) -> ApiConfig | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{source} must be a mapping")
+    locations_raw = raw.get("locations", [])
+    if not isinstance(locations_raw, list) or not all(
+        isinstance(item, str) and item.strip() for item in locations_raw
+    ):
+        raise ConfigError(f"{source}.locations must be a list of non-empty strings")
+    return ApiConfig(
+        enabled=bool(raw.get("enabled", True)),
+        locations=tuple(item.strip() for item in locations_raw),
+        country_wide=bool(raw.get("country_wide", False)),
+        delay_seconds=_parse_delay(raw.get("delay_seconds"), f"{source}.delay_seconds"),
+    )
+
+
+def _parse_delay(raw: object, source: str) -> tuple[float, float] | None:
+    if raw is None:
+        return None
+    error = ConfigError(f"{source} must be [min, max] seconds with 0 <= min <= max")
+    if not isinstance(raw, list) or len(raw) != 2:
+        raise error
+    try:
+        low, high = float(raw[0]), float(raw[1])
+    except (TypeError, ValueError) as exc:
+        raise error from exc
+    if not 0 <= low <= high:
+        raise error
+    return (low, high)
+
+
 def load(path: Path) -> AppConfig:
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
@@ -315,6 +358,7 @@ def load(path: Path) -> AppConfig:
                 max_age_hours=site_max_age,
                 filter=site_filter,
                 limit=site_limit,
+                api=_parse_api(cfg.get("api"), f"sites.{name}.api"),
             )
         )
 

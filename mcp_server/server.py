@@ -88,6 +88,24 @@ def _build_per_site_counts(results: list[dict[str, Any]]) -> dict[str, dict[str,
     return counts
 
 
+def _build_per_site_sources(filtered_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # list, not a {keyword: ...} map: keywords like "node.js" are unsafe Mongo field names
+    sources: list[dict[str, Any]] = []
+    for entry in filtered_results:
+        payload = entry.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        sources.append(
+            {
+                "site": entry.get("site"),
+                "keyword": entry.get("keyword"),
+                "source": payload.get("source", "html"),
+                "fallback_reason": payload.get("fallback_reason"),
+            }
+        )
+    return sources
+
+
 def _build_note(errors: list[dict[str, Any]]) -> str | None:
     """Human-readable failure summary, or None when the run had no errors.
 
@@ -504,7 +522,8 @@ def insert_scrape_run(run_data: dict[str, Any]) -> dict[str, Any]:
     Args:
         run_data: Arbitrary dict with run details. Recommended keys:
             run_metadata: {ok, exit_code, keywords, requested_sites, errors,
-                           per_site_counts, bot_post_status}
+                           per_site_counts, per_site_sources,
+                           bot_post_status}
             filtered_results: per-site filtered/projected jobs
             raw_results: per-site unfiltered jobs (only the site's query params)
             note: failure summary string, or null
@@ -771,6 +790,7 @@ def scrape_jobs(
                     "requested_sites": target_sites,
                     "errors": errors,
                     "per_site_counts": _build_per_site_counts(results),
+                    "per_site_sources": _build_per_site_sources(filtered_results),
                 },
                 "filtered_results": filtered_results,
                 "raw_results": raw_results,

@@ -108,6 +108,23 @@ Values Glints normalizes into the canonical schema:
 Other sites currently emit `null` for these fields — they pass the filter
 via the null-rule.
 
+## API-first sources
+
+Configured per site with `sites.<name>.api` (see `configuration.md`). The API
+runs first; on failure that site + keyword reruns through `url_template`
+(HTML). Detail text is fetched per job from the detail API, falling back to
+the job-page fetch. Indeed has no `api` block (it already uses its GraphQL
+data).
+
+| Site      | Primary source                                                         | Fallback                | Known limits |
+|-----------|------------------------------------------------------------------------|-------------------------|--------------|
+| jobstreet | `GET id.jobstreet.com/api/jobsearch/v5/search` (`where`, `daterange` days, `pageSize` up to 100); detail via `POST id.jobstreet.com/graphql` | HTML via `url_template` | `where` has a radius: Tangerang and Bekasi also return Jakarta jobs (de-duplicated) |
+| glints    | `POST glints.com/api/v2-alc/graphql?op=searchJobsV3` (`LocationIds`, `pageSize` up to 50); detail via `getJobById` (Draft.js JSON converted to text) | HTML via `url_template` | Needs the `deviceid` cookie (fetched from the explore page first); anonymous max 50 jobs per city, page 2 returns 403 |
+| linkedin  | `GET linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search` (`location`, `f_TPR` from `max_age_hours`, `start` paging) | HTML via `url_template` | 10 jobs per page; returns 429 when called quickly; no detail API, so detail stays on the job-page fetch |
+
+Each run records the source used per site (`api` or `html`) and the fallback
+reason in the output and run metadata.
+
 ## Anti-bot considerations
 
 | Site      | Cloudscraper alone | Playwright fallback         |

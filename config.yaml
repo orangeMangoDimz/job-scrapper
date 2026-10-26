@@ -62,17 +62,39 @@ sites:
     enabled: true
     limit: 3
     url_template: "https://id.jobstreet.com/id/{keyword_slug}-jobs?daterange=1&sortmode=ListedDate"
+    api:
+      enabled: true
+      # JobStreet `where` labels; Tangerang/Bekasi also return nearby Jakarta jobs (deduped)
+      locations: [Jakarta Raya, Bandung Jawa Barat, Bekasi Jawa Barat, Tangerang Banten, Tangerang Selatan Banten]
+      country_wide: true
 
   glints:
     enabled: true
     limit: 3
     url_template: "https://glints.com/id/opportunities/jobs/explore?keyword={keyword}&country=ID&sortBy=LATEST"
+    api:
+      enabled: true
+      # Glints hierarchical location UUIDs (lookup: searchHierarchicalLocations on https://glints.com/api/graphql)
+      locations:
+        - 78d63064-78a1-4577-8516-036a6c5e903e  # DKI Jakarta
+        - 86a3dc56-1bd7-4cd3-8225-d3e4b976e552  # Bandung
+        - 87c39cfb-0e3c-4edb-a7a0-754fb70cc587  # Bekasi
+        - ae3c458e-5947-4833-8f1b-e001ce2fad1d  # Tangerang
+        - 337f8da8-70d8-4916-9733-1cee8e4902e9  # Tangerang Selatan
+      country_wide: true
 
   linkedin:
     enabled: true
     limit: 3
     # guest API ignores sortBy=DD (verified); f_TPR is the real recency lever. Kept for convention.
     url_template: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={keyword}&location=Indonesia&f_TPR=r86400&sortBy=DD&start=0"
+    api:
+      enabled: true
+      # guest endpoint returns 429 after a few quick calls: Jakarta covers the metro area
+      # (Bekasi/Tangerang results), plus one country call, with a slow pace
+      locations: ["Jakarta, Indonesia"]
+      country_wide: true
+      delay_seconds: [4, 6]
 
   indeed:
     enabled: true
