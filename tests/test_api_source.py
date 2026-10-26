@@ -68,3 +68,15 @@ def test_dedup_falls_back_to_url_then_title_company():
 def test_is_country_level():
     assert is_country_level(_job("1", " Indonesia "))
     assert not is_country_level(_job("1", "Jakarta, Indonesia"))
+
+
+def test_cities_are_interleaved_so_a_small_limit_keeps_every_city():
+    source = StubSource(
+        {
+            "A": [_job("a1", "Jakarta"), _job("a2", "Jakarta"), _job("a3", "Jakarta")],
+            "B": [_job("b1", "Bandung")],
+            "COUNTRY": [_job("c1", "Indonesia"), _job("a1", "Jakarta")],
+        }
+    )
+    jobs = search_all(source, "devops", ("A", "B"), country_wide=True, max_age_hours=None, limit=3)
+    assert [j["job_id"] for j in jobs] == ["a1", "b1", "c1", "a2", "a3"]

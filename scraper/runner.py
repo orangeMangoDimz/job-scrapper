@@ -179,11 +179,14 @@ def run_one(
             jobs = api_search()
             source = "api"
             _LOG.info("[%s] api returned %d job(s)", label, len(jobs))
+        # fallback_reason is a short code only: it is stored in Mongo, so it must never carry
+        # third-party response bodies or exception text (which can include proxy details)
         except ApiError as exc:
-            fallback_reason = str(exc)
-            _LOG.warning("[%s] api failed (%s); falling back to html", label, exc)
+            fallback_reason = exc.code
+            _LOG.warning("[%s] api failed (%s); falling back to html", label, exc.code)
+            _LOG.debug("[%s] api failure detail: %s", label, exc.detail)
         except Exception as exc:  # unexpected response shape must not kill the pair
-            fallback_reason = f"unexpected_error: {type(exc).__name__}: {exc}"
+            fallback_reason = f"unexpected_error:{type(exc).__name__}"
             _LOG.exception("[%s] api crashed; falling back to html", label)
 
     if jobs is None:

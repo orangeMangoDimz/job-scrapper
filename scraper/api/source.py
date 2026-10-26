@@ -54,12 +54,17 @@ def search_all(
 ) -> list[Job]:
     """One call per city, plus an optional country-wide call kept to 'Indonesia'-only jobs.
 
+    Results are interleaved city by city, so the runner's final `limit` cap keeps jobs from
+    every city instead of only the first one in config order.
     ApiError is not caught: the runner falls back to HTML for the whole site+keyword.
     """
-    jobs: list[Job] = []
-    for location in locations:
-        jobs.extend(source.search(keyword, location, max_age_hours, limit))
+    streams = [source.search(keyword, location, max_age_hours, limit) for location in locations]
     if country_wide:
         country_jobs = source.search(keyword, source.country_location, max_age_hours, limit)
-        jobs.extend(job for job in country_jobs if is_country_level(job))
-    return dedup_jobs(jobs)
+        streams.append([job for job in country_jobs if is_country_level(job)])
+    return dedup_jobs(_round_robin(streams))
+
+
+def _round_robin(streams: list[list[Job]]) -> list[Job]:
+    longest = max((len(stream) for stream in streams), default=0)
+    return [stream[i] for i in range(longest) for stream in streams if i < len(stream)]

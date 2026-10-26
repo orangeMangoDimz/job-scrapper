@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from scraper.api.client import ApiClient, ApiError, graphql_data
@@ -56,10 +58,70 @@ def test_pacing_sleeps_between_calls_not_before_first():
         session_factory=lambda: session,
         sleep=sleeps.append,
         rand=lambda low, high: (low + high) / 2,
+        clock=lambda: 0.0,
     )
     client.get_json("https://x.test/1")
     client.get_json("https://x.test/2")
     assert sleeps == [1.5]
+
+
+def test_no_sleep_when_delay_already_elapsed():
+    session = FakeSession([FakeResponse(payload={}), FakeResponse(payload={})])
+    sleeps: list[float] = []
+    ticks = iter([0.0, 10.0])
+    client = ApiClient(
+        session_factory=lambda: session,
+        sleep=sleeps.append,
+        rand=lambda low, high: 1.5,
+        clock=lambda: next(ticks),
+    )
+    client.get_json("https://x.test/1")
+    client.get_json("https://x.test/2")
+    assert sleeps == []
+
+
+def test_concurrent_calls_get_distinct_paced_slots():
+    # detail calls run in a thread pool sharing one client: each must get its own slot,
+    # not all sleep the same delay and then fire together
+    responses = [FakeResponse(payload={}) for _ in range(4)]
+    session = FakeSession(responses)
+    sleeps: list[float] = []
+    lock = threading.Lock()
+    created: list[int] = []
+
+    def factory():
+        created.append(1)
+        return session
+
+    def record(seconds: float) -> None:
+        with lock:
+            sleeps.append(seconds)
+
+    client = ApiClient(
+        session_factory=factory, sleep=record, rand=lambda low, high: 1.5, clock=lambda: 0.0
+    )
+    barrier = threading.Barrier(4)
+
+    def call(i: int) -> None:
+        barrier.wait()
+        client.get_json(f"https://x.test/{i}")
+
+    threads = [threading.Thread(target=call, args=(i,)) for i in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(sleeps) == [1.5, 3.0, 4.5]
+    assert len(created) == 1
+
+
+def test_error_message_keeps_body_out_of_code():
+    client, _ = make_client([FakeResponse(status_code=429, text="<html>blocked</html>")])
+    with pytest.raises(ApiError) as err:
+        client.get_json("https://x.test/a")
+    assert err.value.code == "http_429"
+    assert "<html>" not in err.value.code
 
 
 def test_warm_does_a_get():

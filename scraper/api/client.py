@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -19,7 +20,11 @@ class ApiError(Exception):
 
 
 class ApiClient:
-    """One curl_cffi session per (site, keyword) run, with jittered pacing between calls."""
+    """One curl_cffi session per (site, keyword) run, with jittered pacing between calls.
+
+    Thread-safe: the detail thread pool shares one client, so each request reserves its own
+    start slot under a lock instead of every thread sleeping the same delay and then bursting.
+    """
 
     def __init__(
         self,
@@ -28,14 +33,18 @@ class ApiClient:
         sleep: Callable[[float], None] = time.sleep,
         rand: Callable[[float, float], float] = random.uniform,
         session_factory: Callable[[], Any] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._proxy = proxy
         self._delay = delay
         self._sleep = sleep
         self._rand = rand
         self._session_factory = session_factory or self._default_session
+        self._clock = clock
         self._session: Any = None
-        self._has_requested = False
+        self._lock = threading.Lock()
+        # earliest start time for the next request; None until the first request
+        self._next_start: float | None = None
 
     def _default_session(self) -> Any:
         from curl_cffi import requests as cffi_requests  # type: ignore[attr-defined]
@@ -43,12 +52,20 @@ class ApiClient:
         proxies = {"http": self._proxy, "https": self._proxy} if self._proxy else None
         return cffi_requests.Session(impersonate=_IMPERSONATE, proxies=proxies)
 
+    def _reserve_slot(self) -> float:
+        """Create the session once and return how long this request must wait."""
+        with self._lock:
+            if self._session is None:
+                self._session = self._session_factory()
+            now = self._clock()
+            start = now if self._next_start is None else max(now, self._next_start)
+            self._next_start = start + self._rand(*self._delay)
+            return start - now
+
     def _request(self, method: str, url: str, **kwargs: Any) -> Any:
-        if self._session is None:
-            self._session = self._session_factory()
-        if self._has_requested:
-            self._sleep(self._rand(*self._delay))
-        self._has_requested = True
+        wait = self._reserve_slot()
+        if wait > 0:
+            self._sleep(wait)
         try:
             response = self._session.request(method, url, timeout=_TIMEOUT_SECONDS, **kwargs)
         except Exception as exc:

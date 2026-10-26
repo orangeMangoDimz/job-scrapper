@@ -84,7 +84,7 @@ def test_api_error_falls_back_to_html(tmp_path: Path):
     )
     out = _read(tmp_path, "linkedin.json")
     assert out["source"] == "html"
-    assert out["fallback_reason"] == "http_429: slow down"
+    assert out["fallback_reason"] == "http_429"  # code only, no response body
     assert [j["title"] for j in out["jobs"]] == ["Html Role"]
 
 
@@ -153,5 +153,5 @@ def test_unexpected_api_exception_also_falls_back(tmp_path: Path):
     )
     out = _read(tmp_path, "linkedin.json")
     assert out["source"] == "html"
-    assert out["fallback_reason"].startswith("unexpected_error: KeyError")
+    assert out["fallback_reason"] == "unexpected_error:KeyError"
     assert [j["title"] for j in out["jobs"]] == ["Html Role"]
