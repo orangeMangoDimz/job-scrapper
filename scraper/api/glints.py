@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from ..types import Job, empty_job
@@ -104,11 +105,19 @@ class GlintsApi:
     def __init__(self, client: ApiClient) -> None:
         self._client = client
         self._is_warm = False
+        # detail calls share this source across a thread pool: warm up exactly once
+        self._warm_lock = threading.Lock()
+
+    def _ensure_warm(self) -> None:
+        if self._is_warm:
+            return
+        with self._warm_lock:
+            if not self._is_warm:
+                self._client.warm(WARM_URL)
+                self._is_warm = True
 
     def _post(self, operation: str, query: str, variables: dict[str, Any]) -> dict[str, Any]:
-        if not self._is_warm:
-            self._client.warm(WARM_URL)
-            self._is_warm = True
+        self._ensure_warm()
         body = {"operationName": operation, "query": query, "variables": variables}
         return self._client.post_json(f"{GRAPHQL_URL}?op={operation}", body)
 

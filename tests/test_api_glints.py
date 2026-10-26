@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 
 import pytest
 
@@ -115,3 +117,39 @@ def test_detail_converts_draftjs():
     job["job_id"] = "ead43098"
     assert GlintsApi(client).detail(job) == "- AWS"
     assert session.calls[1][2]["json"]["variables"] == {"id": "ead43098"}
+
+
+class CountingClient:
+    """Fake client whose warm-up is slow, to expose a check-then-set race."""
+
+    def __init__(self) -> None:
+        self.warms = 0
+        self._lock = threading.Lock()
+
+    def warm(self, url: str) -> None:
+        time.sleep(0.02)
+        with self._lock:
+            self.warms += 1
+
+    def post_json(self, url: str, body: dict, headers: dict | None = None) -> dict:
+        raw = json.dumps({"blocks": [{"text": "x", "type": "unstyled"}]})
+        return {"data": {"getJobById": {"descriptionJsonString": raw}}}
+
+
+def test_concurrent_detail_calls_warm_up_once():
+    client = CountingClient()
+    api = GlintsApi(client)  # type: ignore[arg-type]
+    barrier = threading.Barrier(4)
+
+    def call(i: int) -> None:
+        job = empty_job("glints", "T", "C")
+        job["job_id"] = str(i)
+        barrier.wait()
+        api.detail(job)
+
+    threads = [threading.Thread(target=call, args=(i,)) for i in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert client.warms == 1

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import threading
+import time
+from typing import Any
 
 import pytest
 
@@ -65,40 +67,120 @@ def test_pacing_sleeps_between_calls_not_before_first():
     assert sleeps == [1.5]
 
 
+class FakeClock:
+    """Manual clock; `advance` simulates time passing (e.g. a slow response)."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class SlowSession(FakeSession):
+    """Each request moves the fake clock forward, like a response that takes time."""
+
+    def __init__(self, responses: list[FakeResponse], clock: FakeClock, seconds: float) -> None:
+        super().__init__(responses)
+        self._clock = clock
+        self._seconds = seconds
+
+    def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
+        self._clock.advance(self._seconds)
+        return super().request(method, url, **kwargs)
+
+
 def test_no_sleep_when_delay_already_elapsed():
+    clock = FakeClock()
     session = FakeSession([FakeResponse(payload={}), FakeResponse(payload={})])
     sleeps: list[float] = []
-    ticks = iter([0.0, 10.0])
     client = ApiClient(
         session_factory=lambda: session,
         sleep=sleeps.append,
         rand=lambda low, high: 1.5,
-        clock=lambda: next(ticks),
+        clock=clock,
     )
     client.get_json("https://x.test/1")
+    clock.advance(10.0)
     client.get_json("https://x.test/2")
     assert sleeps == []
 
 
+def test_partially_elapsed_delay_sleeps_the_rest():
+    clock = FakeClock()
+    session = FakeSession([FakeResponse(payload={}), FakeResponse(payload={})])
+    sleeps: list[float] = []
+    client = ApiClient(
+        session_factory=lambda: session,
+        sleep=sleeps.append,
+        rand=lambda low, high: 1.5,
+        clock=clock,
+    )
+    client.get_json("https://x.test/1")
+    clock.advance(1.0)
+    client.get_json("https://x.test/2")
+    assert sleeps == [0.5]
+
+
+def test_gap_is_measured_from_the_end_of_the_previous_response():
+    # LinkedIn needs a real 4-6s idle gap: a slow response must not eat into it
+    clock = FakeClock()
+    session = SlowSession([FakeResponse(payload={}), FakeResponse(payload={})], clock, 2.0)
+    sleeps: list[float] = []
+    client = ApiClient(
+        session_factory=lambda: session,
+        sleep=sleeps.append,
+        rand=lambda low, high: 5.0,
+        clock=clock,
+    )
+    client.get_json("https://x.test/1")  # starts at 0, response arrives at 2
+    client.get_json("https://x.test/2")  # called at 2: must wait until 2 + 5
+    assert sleeps == [5.0]
+
+
+def test_failed_request_still_paces_the_next_one():
+    clock = FakeClock()
+    session = FakeSession([FakeResponse(status_code=500), FakeResponse(payload={})])
+    sleeps: list[float] = []
+    client = ApiClient(
+        session_factory=lambda: session,
+        sleep=sleeps.append,
+        rand=lambda low, high: 1.5,
+        clock=clock,
+    )
+    with pytest.raises(ApiError):
+        client.get_json("https://x.test/1")
+    client.get_json("https://x.test/2")
+    assert sleeps == [1.5]
+
+
 def test_concurrent_calls_get_distinct_paced_slots():
     # detail calls run in a thread pool sharing one client: each must get its own slot,
-    # not all sleep the same delay and then fire together
-    responses = [FakeResponse(payload={}) for _ in range(4)]
-    session = FakeSession(responses)
+    # not all sleep the same delay and then fire together. The slow rand/factory widen
+    # the race window so this test fails if the lock is removed.
+    session = FakeSession([FakeResponse(payload={}) for _ in range(4)])
     sleeps: list[float] = []
-    lock = threading.Lock()
+    record_lock = threading.Lock()
     created: list[int] = []
 
-    def factory():
+    def slow_factory() -> FakeSession:
+        time.sleep(0.02)
         created.append(1)
         return session
 
+    def slow_rand(low: float, high: float) -> float:
+        time.sleep(0.01)
+        return 1.5
+
     def record(seconds: float) -> None:
-        with lock:
+        with record_lock:
             sleeps.append(seconds)
 
     client = ApiClient(
-        session_factory=factory, sleep=record, rand=lambda low, high: 1.5, clock=lambda: 0.0
+        session_factory=slow_factory, sleep=record, rand=slow_rand, clock=lambda: 0.0
     )
     barrier = threading.Barrier(4)
 
@@ -114,14 +196,6 @@ def test_concurrent_calls_get_distinct_paced_slots():
 
     assert sorted(sleeps) == [1.5, 3.0, 4.5]
     assert len(created) == 1
-
-
-def test_error_message_keeps_body_out_of_code():
-    client, _ = make_client([FakeResponse(status_code=429, text="<html>blocked</html>")])
-    with pytest.raises(ApiError) as err:
-        client.get_json("https://x.test/a")
-    assert err.value.code == "http_429"
-    assert "<html>" not in err.value.code
 
 
 def test_warm_does_a_get():

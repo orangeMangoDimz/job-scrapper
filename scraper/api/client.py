@@ -54,24 +54,36 @@ class ApiClient:
         proxies = {"http": self._proxy, "https": self._proxy} if self._proxy else None
         return cffi_requests.Session(impersonate=_IMPERSONATE, proxies=proxies)
 
-    def _reserve_slot(self) -> float:
-        """Create the session once and return how long this request must wait."""
+    def _reserve_slot(self) -> tuple[float, float]:
+        """Create the session once; return (seconds to wait, this request's gap)."""
         with self._lock:
             if self._session is None:
                 self._session = self._session_factory()
             now = self._clock()
             start = now if self._next_start is None else max(now, self._next_start)
-            self._next_start = start + self._rand(*self._delay)
-            return start - now
+            gap = self._rand(*self._delay)
+            # spaces out concurrent starts (detail thread pool)
+            self._next_start = start + gap
+            return start - now, gap
+
+    def _release_slot(self, gap: float) -> None:
+        """The next request waits `gap` after this response, so a slow response
+        does not eat into the idle gap (LinkedIn needs a real 4-6s pause)."""
+        with self._lock:
+            end_based = self._clock() + gap
+            if self._next_start is None or end_based > self._next_start:
+                self._next_start = end_based
 
     def _request(self, method: str, url: str, **kwargs: Any) -> Any:
-        wait = self._reserve_slot()
+        wait, gap = self._reserve_slot()
         if wait > 0:
             self._sleep(wait)
         try:
             response = self._session.request(method, url, timeout=_TIMEOUT_SECONDS, **kwargs)
         except Exception as exc:
             raise ApiError("runtime_error", f"{type(exc).__name__}: {exc}") from exc
+        finally:
+            self._release_slot(gap)
         if response.status_code != 200:
             raise ApiError(f"http_{response.status_code}", response.text[:_ERROR_BODY_CHARS])
         return response

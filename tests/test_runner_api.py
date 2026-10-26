@@ -85,6 +85,8 @@ def test_api_error_falls_back_to_html(tmp_path: Path):
     out = _read(tmp_path, "linkedin.json")
     assert out["source"] == "html"
     assert out["fallback_reason"] == "http_429"  # code only, no response body
+    for name in ("linkedin.json", "linkedin.raw.json"):
+        assert "slow down" not in (tmp_path / name).read_text()
     assert [j["title"] for j in out["jobs"]] == ["Html Role"]
 
 
