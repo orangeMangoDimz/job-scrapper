@@ -90,7 +90,7 @@ def _fetch_requirements(
         if detail is not None:
             try:
                 text = detail(job)
-            except ApiError as exc:
+            except Exception as exc:  # ApiError or a mapping bug: fall back to the job page
                 _LOG.debug("[%s] detail api failed for %s: %s", scraper.name, job.get("url"), exc)
                 text = None
             if text:
@@ -182,6 +182,9 @@ def run_one(
         except ApiError as exc:
             fallback_reason = str(exc)
             _LOG.warning("[%s] api failed (%s); falling back to html", label, exc)
+        except Exception as exc:  # unexpected response shape must not kill the pair
+            fallback_reason = f"unexpected_error: {type(exc).__name__}: {exc}"
+            _LOG.exception("[%s] api crashed; falling back to html", label)
 
     if jobs is None:
         jobs = _html_jobs(

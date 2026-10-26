@@ -135,3 +135,23 @@ def test_detail_api_used_then_page_fallback_per_job(tmp_path: Path):
     jobs = {j["title"]: j["requirements"] for j in _read(tmp_path, "linkedin.json")["jobs"]}
     assert jobs["Role 1"] == "From api"
     assert jobs["Role 2"] is not None and "From page" in jobs["Role 2"]
+
+
+def test_unexpected_api_exception_also_falls_back(tmp_path: Path):
+    def crashing():
+        raise KeyError("jobsInPage")
+
+    run_one(
+        _scraper(),
+        _fetcher(HTML_CARD),
+        tmp_path,
+        "devops",
+        FIELDS - {"requirements"},
+        None,
+        {},
+        api_search=crashing,
+    )
+    out = _read(tmp_path, "linkedin.json")
+    assert out["source"] == "html"
+    assert out["fallback_reason"].startswith("unexpected_error: KeyError")
+    assert [j["title"] for j in out["jobs"]] == ["Html Role"]
