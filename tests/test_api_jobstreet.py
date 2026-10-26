@@ -103,3 +103,11 @@ def test_detail_without_job_id_returns_none():
     client, session = make_client([])
     assert JobstreetApi(client).detail(empty_job("jobstreet", "T", "C")) is None
     assert session.calls == []
+
+
+def test_keyword_is_lowercased_like_the_html_slug():
+    # JobStreet ranks "DevOps" differently from "devops" (21 vs 42 jobs, live 2026-10-26);
+    # the HTML path always sent the lowercased slug
+    client, session = make_client([FakeResponse(payload={"data": []})])
+    JobstreetApi(client).search("DevOps", "Jakarta Raya", None, 30)
+    assert session.calls[0][2]["params"]["keywords"] == "devops"

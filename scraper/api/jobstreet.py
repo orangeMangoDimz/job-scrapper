@@ -92,7 +92,7 @@ class JobstreetApi:
     ) -> dict[str, str]:
         params = {
             "siteKey": SITE_KEY,
-            "keywords": keyword,
+            "keywords": keyword.lower(),  # search is case-sensitive; HTML slug was lowercase
             "locale": LOCALE,
             "page": str(page),
             "pageSize": str(size),
