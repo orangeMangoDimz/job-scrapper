@@ -40,6 +40,8 @@ def test_run_one_bails_when_html_required_and_missing(tmp_path: Path):
         "url": "https://glints.com/x",
         "keyword": "data analyst",
         "attempts": [],
+        "source": "html",
+        "fallback_reason": None,
     }
     scraper.parse.assert_not_called()
 

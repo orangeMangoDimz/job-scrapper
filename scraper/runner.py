@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .api.client import ApiClient, ApiError
+from .api.registry import API_SOURCES
+from .api.source import search_all
 from .config_loader import ALLOWED_URL_HOSTS, AppConfig, keyword_slug
 from .fetchers import (
     CloudscraperFetcher,
@@ -62,14 +65,12 @@ def _fetch_requirements(
     fields: frozenset[str],
     fetcher: FetchChain,
     scraper: Scraper,
+    detail: Callable[[Job], str | None] | None = None,
 ) -> None:
     if "requirements" not in fields or not jobs:
         return
 
-    def _fetch_one(job: Job) -> str | None:
-        existing = job.get("requirements")
-        if isinstance(existing, str) and existing.strip():
-            return existing
+    def _from_page(job: Job) -> str | None:
         url = job.get("url")
         if not url:
             return None
@@ -82,6 +83,20 @@ def _fetch_requirements(
         result = fetcher.fetch(url)
         return scraper.parse_detail(result.html) if result.html else None
 
+    def _fetch_one(job: Job) -> str | None:
+        existing = job.get("requirements")
+        if isinstance(existing, str) and existing.strip():
+            return existing
+        if detail is not None:
+            try:
+                text = detail(job)
+            except ApiError as exc:
+                _LOG.debug("[%s] detail api failed for %s: %s", scraper.name, job.get("url"), exc)
+                text = None
+            if text:
+                return text
+        return _from_page(job)
+
     _LOG.info("[%s] fetching requirements for %d job(s)", scraper.name, len(jobs))
     with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as ex:
         futures = {ex.submit(_fetch_one, job): i for i, job in enumerate(jobs)}
@@ -93,21 +108,15 @@ def _fetch_requirements(
                 jobs[idx]["requirements"] = None
 
 
-def run_one(
+def _html_jobs(
     scraper: Scraper,
     fetcher: FetchChain,
-    output_dir: Path,
     keyword: str,
-    fields: frozenset[str],
-    max_age_hours: int | None,
-    content_filter: dict[str, list[str]],
-) -> None:
-    label = f"{scraper.name}:{keyword_slug(keyword)}"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    json_path = output_dir / f"{scraper.name}.json"
-    raw_path = output_dir / f"{scraper.name}.raw.json"
-    debug_path = output_dir / f"{scraper.name}.debug.html"
-
+    label: str,
+    paths: tuple[Path, Path, Path],
+    fallback_reason: str | None,
+) -> list[Job] | None:
+    json_path, raw_path, debug_path = paths
     _LOG.info("[%s] fetching %s", label, scraper.url)
     result = fetcher.fetch(scraper.url)
     html = result.html
@@ -120,6 +129,8 @@ def run_one(
                     "url": scraper.url,
                     "keyword": keyword,
                     "attempts": [a.to_dict() for a in result.attempts],
+                    "source": "html",
+                    "fallback_reason": fallback_reason,
                 },
                 indent=2,
             )
@@ -132,17 +143,55 @@ def run_one(
                 indent=2,
             )
         )
-        return
+        return None
 
     if html:
         debug_path.write_text(html)
         _LOG.info("[%s] saved raw html → %s (%d bytes)", label, debug_path.name, len(html))
     else:
         _LOG.info("[%s] no search html (scraper handles fetch internally)", label)
+    return scraper.parse(html or "")
 
-    jobs = scraper.parse(html or "")
+
+def run_one(
+    scraper: Scraper,
+    fetcher: FetchChain,
+    output_dir: Path,
+    keyword: str,
+    fields: frozenset[str],
+    max_age_hours: int | None,
+    content_filter: dict[str, list[str]],
+    *,
+    api_search: Callable[[], list[Job]] | None = None,
+    api_detail: Callable[[Job], str | None] | None = None,
+) -> None:
+    label = f"{scraper.name}:{keyword_slug(keyword)}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = output_dir / f"{scraper.name}.json"
+    raw_path = output_dir / f"{scraper.name}.raw.json"
+    debug_path = output_dir / f"{scraper.name}.debug.html"
+
+    jobs: list[Job] | None = None
+    source = "html"
+    fallback_reason: str | None = None
+    if api_search is not None:
+        try:
+            jobs = api_search()
+            source = "api"
+            _LOG.info("[%s] api returned %d job(s)", label, len(jobs))
+        except ApiError as exc:
+            fallback_reason = str(exc)
+            _LOG.warning("[%s] api failed (%s); falling back to html", label, exc)
+
+    if jobs is None:
+        jobs = _html_jobs(
+            scraper, fetcher, keyword, label, (json_path, raw_path, debug_path), fallback_reason
+        )
+        if jobs is None:
+            return
+
     parsed_count = len(jobs)
-    _LOG.info("[%s] parsed %d job(s)", label, parsed_count)
+    _LOG.info("[%s] parsed %d job(s) via %s", label, parsed_count, source)
 
     _enrich_jobs(jobs, keyword)
 
@@ -157,6 +206,8 @@ def run_one(
                 "fields": sorted(CANONICAL_FIELDS),
                 "count": len(raw_jobs),
                 "jobs": raw_jobs,
+                "source": source,
+                "fallback_reason": fallback_reason,
             },
             indent=2,
         )
@@ -213,7 +264,9 @@ def run_one(
         _LOG.info("[%s] capping %d job(s) to limit=%d", label, len(jobs), scraper.limit)
         jobs = jobs[: scraper.limit]
 
-    _fetch_requirements(jobs, fields, fetcher, scraper)
+    _fetch_requirements(
+        jobs, fields, fetcher, scraper, detail=api_detail if source == "api" else None
+    )
 
     projected = project_jobs(jobs, fields)
     json_path.write_text(
@@ -225,6 +278,8 @@ def run_one(
                 "filter": content_filter or None,
                 "count": len(projected),
                 "jobs": projected,
+                "source": source,
+                "fallback_reason": fallback_reason,
             },
             indent=2,
         )
@@ -296,6 +351,19 @@ def run(
         if not keyword_dir.resolve().is_relative_to(out):
             _LOG.warning("[runner] keyword '%s' slug escapes output_dir; skipping", keyword)
             return
+        api_search: Callable[[], list[Job]] | None = None
+        api_detail: Callable[[Job], str | None] | None = None
+        api_cfg = site_cfg.api
+        if api_cfg is not None and api_cfg.enabled and name in API_SOURCES:
+            api_source = API_SOURCES[name](ApiClient(proxy=proxy_url))
+            locations, country_wide = api_cfg.locations, api_cfg.country_wide
+            max_age, limit = config.max_age_for(name), config.limit_for(name)
+
+            def _search_api() -> list[Job]:
+                return search_all(api_source, keyword, locations, country_wide, max_age, limit)
+
+            api_search = _search_api
+            api_detail = api_source.detail
         run_one(
             scraper,
             fetcher,
@@ -304,6 +372,8 @@ def run(
             config.fields_for(name),
             config.max_age_for(name),
             config.filter_for(name),
+            api_search=api_search,
+            api_detail=api_detail,
         )
 
     workers = max(1, min(config.concurrency, len(pairs)))
