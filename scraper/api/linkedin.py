@@ -34,7 +34,8 @@ class LinkedinApi:
             if not cards:
                 break
             jobs.extend(cards)
-            if len(jobs) >= limit:
+            # a short page is the last one; skip the extra call (LinkedIn rate-limits fast)
+            if len(cards) < PAGE_SIZE or len(jobs) >= limit:
                 break
         return jobs[:limit]
 

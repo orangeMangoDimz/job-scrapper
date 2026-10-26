@@ -25,8 +25,9 @@ def _page(start: int, count: int) -> FakeResponse:
 
 
 def test_sends_location_tpr_and_start():
-    client, session = make_client([_page(0, 3), FakeResponse(text="")])
+    client, session = make_client([_page(0, 3)])
     jobs = LinkedinApi(client).search("devops", "Jakarta, Indonesia", 72, 30)
+    assert len(session.calls) == 1  # short page = last page, no extra request
     params = session.calls[0][2]["params"]
     assert params == {
         "keywords": "devops",
