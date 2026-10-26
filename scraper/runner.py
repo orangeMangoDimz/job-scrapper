@@ -358,7 +358,12 @@ def run(
         api_detail: Callable[[Job], str | None] | None = None
         api_cfg = site_cfg.api
         if api_cfg is not None and api_cfg.enabled and name in API_SOURCES:
-            api_source = API_SOURCES[name](ApiClient(proxy=proxy_url))
+            client = (
+                ApiClient(proxy=proxy_url, delay=api_cfg.delay_seconds)
+                if api_cfg.delay_seconds is not None
+                else ApiClient(proxy=proxy_url)
+            )
+            api_source = API_SOURCES[name](client)
             locations, country_wide = api_cfg.locations, api_cfg.country_wide
             max_age, limit = config.max_age_for(name), config.limit_for(name)
 

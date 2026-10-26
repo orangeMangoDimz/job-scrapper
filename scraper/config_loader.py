@@ -42,6 +42,8 @@ class ApiConfig:
     enabled: bool
     locations: tuple[str, ...]
     country_wide: bool
+    # (min, max) jittered pause between this site's API calls; None = client default
+    delay_seconds: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -274,7 +276,23 @@ def _parse_api(raw: object, source: str) -> ApiConfig | None:
         enabled=bool(raw.get("enabled", True)),
         locations=tuple(item.strip() for item in locations_raw),
         country_wide=bool(raw.get("country_wide", False)),
+        delay_seconds=_parse_delay(raw.get("delay_seconds"), f"{source}.delay_seconds"),
     )
+
+
+def _parse_delay(raw: object, source: str) -> tuple[float, float] | None:
+    if raw is None:
+        return None
+    error = ConfigError(f"{source} must be [min, max] seconds with 0 <= min <= max")
+    if not isinstance(raw, list) or len(raw) != 2:
+        raise error
+    try:
+        low, high = float(raw[0]), float(raw[1])
+    except (TypeError, ValueError) as exc:
+        raise error from exc
+    if not 0 <= low <= high:
+        raise error
+    return (low, high)
 
 
 def load(path: Path) -> AppConfig:

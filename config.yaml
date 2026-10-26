@@ -90,8 +90,11 @@ sites:
     url_template: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={keyword}&location=Indonesia&f_TPR=r86400&sortBy=DD&start=0"
     api:
       enabled: true
-      locations: ["Jakarta, Indonesia", "Bandung, Indonesia", "Bekasi, Indonesia", "Tangerang, Indonesia", "Tangerang Selatan, Indonesia"]
+      # guest endpoint returns 429 after a few quick calls: Jakarta covers the metro area
+      # (Bekasi/Tangerang results), plus one country call, with a slow pace
+      locations: ["Jakarta, Indonesia"]
       country_wide: true
+      delay_seconds: [4, 6]
 
   indeed:
     enabled: true

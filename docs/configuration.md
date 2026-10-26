@@ -217,6 +217,7 @@ sites:
       enabled: true                 # optional, default true
       locations: [Jakarta Raya, Bandung Jawa Barat]
       country_wide: true            # optional
+      delay_seconds: [4, 6]         # optional, default [1, 2]
 ```
 
 - `enabled` (default `true`): `false` skips the API and uses HTML only.
@@ -224,6 +225,9 @@ sites:
   label, Glints location UUID, LinkedIn place name (`"Jakarta, Indonesia"`).
 - `country_wide`: adds one extra call without a city and keeps only jobs whose
   location is labelled just `Indonesia`.
+- `delay_seconds` (default `[1, 2]`): random pause between this site's API
+  calls, as `[min, max]` seconds. LinkedIn uses `[4, 6]` because its guest
+  endpoint returns `429` after a few quick calls.
 - Results from all calls are de-duplicated by `job_id`, then by URL.
 - Fallback: any API failure (HTTP error, non-JSON, GraphQL error, network
   error) reruns that whole site + keyword through `url_template` (HTML). An
