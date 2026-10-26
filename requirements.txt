@@ -9,3 +9,4 @@ pymongo>=4.0
 mcp[cli]>=1.2.0
 dateparser>=1.2.0
 pytest>=8.0
+markdownify>=1.2.0
