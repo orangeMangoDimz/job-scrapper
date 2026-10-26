@@ -154,6 +154,7 @@ sites:
     max_age_hours: 12                              # optional, overrides global
     filter: {...}                                  # optional, replaces global
     limit: 10                                      # optional, overrides global limit
+    api: {...}                                     # optional, API-first source (see below)
 ```
 
 #### `sites.<name>.enabled`
@@ -203,6 +204,31 @@ Optional positive integer. Replaces the global `limit` for this site only —
 useful when one source's relevance ranking buries good matches deep in the
 list (e.g. raise `sites.indeed.limit` so Jakarta jobs surface past the top
 two non-Jakarta hits, while keeping other sites at the cheaper global limit).
+
+### `sites.<name>.api`
+
+Optional block that makes a site fetch from its JSON/API source first.
+Omit it (e.g. `indeed`) and the site uses `url_template` only.
+
+```yaml
+sites:
+  jobstreet:
+    api:
+      enabled: true                 # optional, default true
+      locations: [Jakarta Raya, Bandung Jawa Barat]
+      country_wide: true            # optional
+```
+
+- `enabled` (default `true`): `false` skips the API and uses HTML only.
+- `locations`: one API call per entry. Format is per site: JobStreet `where`
+  label, Glints location UUID, LinkedIn place name (`"Jakarta, Indonesia"`).
+- `country_wide`: adds one extra call without a city and keeps only jobs whose
+  location is labelled just `Indonesia`.
+- Results from all calls are de-duplicated by `job_id`, then by URL.
+- Fallback: any API failure (HTTP error, non-JSON, GraphQL error, network
+  error) reruns that whole site + keyword through `url_template` (HTML). An
+  empty API result is valid and does not trigger the fallback.
+- `limit` still means "max jobs after filters"; each API call pages up to it.
 
 ## Validation rules summary
 
