@@ -3,10 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
-from bs4 import BeautifulSoup
-
 from ..log import get_logger
 from ..types import Job, empty_job
+from ._markdown import html_to_markdown
 from .base import Scraper
 
 _LOG = get_logger()
@@ -73,13 +72,6 @@ def _extract_search_params(url: str) -> tuple[str, str]:
     keyword = (qs.get("q") or [""])[0].replace("+", " ").strip()
     where = (qs.get("l") or [_DEFAULT_LOCATION])[0].strip() or _DEFAULT_LOCATION
     return keyword, where
-
-
-def _strip_html(html: str | None) -> str | None:
-    if not html:
-        return None
-    text = BeautifulSoup(html, "lxml").get_text("\n", strip=True)
-    return text or None
 
 
 def _format_salary(compensation: dict | None) -> str | None:
@@ -221,7 +213,7 @@ class IndeedScraper(Scraper):
             )
 
             posted_at = _iso_from_millis(entry.get("datePublished"))
-            description = _strip_html(
+            description = html_to_markdown(
                 (entry.get("description") or {}).get("html")
                 if isinstance(entry.get("description"), dict)
                 else None
