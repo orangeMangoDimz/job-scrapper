@@ -689,7 +689,7 @@ def scrape_jobs(
                 A site entry is absent from this list when its fetch failed
                 (see errors). Each job is projected to the fields configured
                 for that site and normalized to canonical schema. Canonical
-                fields: site, matched_keyword, title, company, url, location,
+                fields: site, matched_keyword, title, company, company_id, url, location,
                 salary, posted_date, posted_at, work_type, employment_type,
                 experience_level, job_id, requirements. Fields a site cannot
                 extract are returned as null.

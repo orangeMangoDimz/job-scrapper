@@ -23,7 +23,7 @@ def _item(job_id: str, **overrides):
         "workArrangementOption": "HYBRID",
         "minYearsOfExperience": 3,
         "maxYearsOfExperience": 5,
-        "company": {"name": "Insignia"},
+        "company": {"id": "c0ffee-1", "name": "Insignia"},
         "location": {
             "formattedName": "Kebon Jeruk",
             "parents": [
@@ -153,3 +153,17 @@ def test_concurrent_detail_calls_warm_up_once():
     for thread in threads:
         thread.join()
     assert client.warms == 1
+
+
+def test_maps_company_id():
+    client, _ = make_client([FakeResponse(text="<html>"), _search([_item("a")])])
+    [job] = GlintsApi(client).search("devops", JAKARTA, 72, 30)
+    assert job["company_id"] == "c0ffee-1"
+
+
+def test_company_id_is_none_when_missing():
+    client, _ = make_client(
+        [FakeResponse(text="<html>"), _search([_item("a", company={"name": "Insignia"})])]
+    )
+    [job] = GlintsApi(client).search("devops", JAKARTA, 72, 30)
+    assert job["company_id"] is None

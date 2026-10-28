@@ -23,7 +23,7 @@ query searchJobsV3($data: JobSearchConditionInput!) {
     jobsInPage {
       id title createdAt type workArrangementOption
       minYearsOfExperience maxYearsOfExperience
-      company { name }
+      company { id name }
       location { formattedName parents { formattedName level } }
       salaries { minAmount maxAmount CurrencyCode salaryMode }
     }
@@ -79,12 +79,12 @@ def _lower(value: Any) -> str | None:
 
 def _to_job(item: dict[str, Any]) -> Job | None:
     title = item.get("title")
-    company = (
-        (item.get("company") or {}).get("name") if isinstance(item.get("company"), dict) else None
-    )
+    company_data = item.get("company") if isinstance(item.get("company"), dict) else {}
+    company = company_data.get("name")
     if not title or not company:
         return None
     job = empty_job("glints", str(title).strip(), str(company).strip())
+    job["company_id"] = str(company_data["id"]) if company_data.get("id") else None
     job_id = str(item["id"]) if item.get("id") else None
     job["job_id"] = job_id
     job["url"] = f"https://glints.com/id/opportunities/jobs/{job_id}" if job_id else None

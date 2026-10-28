@@ -42,6 +42,7 @@ def test_search_maps_fields_and_sends_params():
     job = jobs[0]
     assert job["site"] == "jobstreet"
     assert job["company"] == "PT Platinumetrix Global Inovasi"
+    assert job["company_id"] == "61020132"
     assert job["job_id"] == "95497990"
     assert job["url"] == "https://id.jobstreet.com/id/job/95497990"
     assert job["location"] == "Jakarta"
@@ -111,3 +112,10 @@ def test_keyword_is_lowercased_like_the_html_slug():
     client, session = make_client([FakeResponse(payload={"data": []})])
     JobstreetApi(client).search("DevOps", "Jakarta Raya", None, 30)
     assert session.calls[0][2]["params"]["keywords"] == "devops"
+
+
+def test_company_id_is_none_without_advertiser_id():
+    item = _item("1", advertiser={"description": "PT Acme"})
+    client, _ = make_client([FakeResponse(payload={"data": [item]})])
+    [job] = JobstreetApi(client).search("devops", "Jakarta Raya", 72, 30)
+    assert job["company_id"] is None

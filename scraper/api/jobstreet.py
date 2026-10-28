@@ -37,6 +37,13 @@ def _company(item: dict[str, Any]) -> str | None:
     return str(name) if name else None
 
 
+def _company_id(item: dict[str, Any]) -> str | None:
+    advertiser = item.get("advertiser")
+    if isinstance(advertiser, dict) and advertiser.get("id"):
+        return str(advertiser["id"])
+    return None
+
+
 def _location(item: dict[str, Any]) -> str | None:
     locations = item.get("locations")
     if isinstance(locations, list) and locations and isinstance(locations[0], dict):
@@ -68,6 +75,7 @@ def _to_job(item: dict[str, Any]) -> Job | None:
     if not title or not company:
         return None
     job = empty_job("jobstreet", str(title).strip(), company.strip())
+    job["company_id"] = _company_id(item)
     job_id = str(item["id"]) if item.get("id") else None
     job["job_id"] = job_id
     job["url"] = f"https://id.jobstreet.com/id/job/{job_id}" if job_id else None
