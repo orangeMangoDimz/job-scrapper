@@ -8,6 +8,7 @@ class Job(TypedDict):
     matched_keyword: str | None
     title: str
     company: str
+    company_id: str | None
     url: str | None
     location: str | None
     salary: str | None
@@ -25,6 +26,7 @@ JOB_FIELD_ORDER: tuple[str, ...] = (
     "matched_keyword",
     "title",
     "company",
+    "company_id",
     "url",
     "location",
     "salary",
@@ -48,6 +50,7 @@ def empty_job(site: str, title: str, company: str) -> Job:
         matched_keyword=None,
         title=title,
         company=company,
+        company_id=None,
         url=None,
         location=None,
         salary=None,

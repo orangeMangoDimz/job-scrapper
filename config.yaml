@@ -46,6 +46,7 @@ filter:
 default_fields:
   - title
   - company
+  - company_id
   - location
   - url
   - salary
