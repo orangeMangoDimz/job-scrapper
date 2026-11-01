@@ -21,6 +21,7 @@ def test_run_one_bails_when_html_required_and_missing(tmp_path: Path):
     scraper.name = "glints"
     scraper.url = "https://glints.com/x"
     scraper.requires_search_html = True
+    scraper.api_only = False
     scraper.parse = MagicMock(return_value=[])
     fetcher = _make_fetcher(html=None)
 
@@ -51,6 +52,7 @@ def test_run_one_skips_bail_for_indeed_style_scraper(tmp_path: Path):
     scraper.name = "indeed"
     scraper.url = "https://id.indeed.com/jobs?q=x"
     scraper.requires_search_html = False
+    scraper.api_only = False
     scraper.limit = 10
     fake_job = {
         "site": "indeed",

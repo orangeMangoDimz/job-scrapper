@@ -23,3 +23,8 @@ sites:
     enabled: false
     limit: 2
     url_template: "https://id.indeed.com/jobs?q={keyword_plus}&l=Indonesia&fromage=1"
+
+  upwork:
+    enabled: false
+    limit: 3
+    url_template: "https://www.upwork.com/nx/search/jobs/?q={keyword}&sort=recency"

@@ -91,6 +91,9 @@ class ApiClient:
     def warm(self, url: str) -> None:
         self._request("GET", url)
 
+    def get_cookie(self, url: str, name: str) -> str | None:
+        return self._request("GET", url).cookies.get(name)
+
     def get_text(
         self, url: str, params: dict[str, str] | None = None, headers: dict[str, str] | None = None
     ) -> str:

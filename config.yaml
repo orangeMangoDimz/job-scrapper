@@ -50,6 +50,8 @@ default_fields:
   - location
   - url
   - salary
+  - salary_min
+  - salary_max
   - posted_date
   - posted_at
   - work_type
@@ -101,3 +103,16 @@ sites:
     enabled: true
     limit: 3
     url_template: "https://id.indeed.com/jobs?q={keyword_plus}&l=Indonesia&fromage=1"
+
+  upwork:
+    enabled: true
+    limit: 30
+    # all jobs are remote and worldwide, so the global Indonesian location filter is off
+    filter: {}
+    # never fetched: Upwork is API-only. The runner still requires a url_template.
+    url_template: "https://www.upwork.com/nx/search/jobs/?q={keyword}&sort=recency"
+    api:
+      enabled: true
+      # search_all needs one entry to make one call. UpworkApi ignores the value.
+      locations: [Remote]
+      country_wide: false

@@ -24,6 +24,7 @@ ALLOWED_URL_HOSTS: frozenset[str] = frozenset(
         "id.indeed.com",
         "indeed.com",
         "www.indeed.com",
+        "www.upwork.com",
     }
 )
 

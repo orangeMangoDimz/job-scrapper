@@ -690,8 +690,8 @@ def scrape_jobs(
                 (see errors). Each job is projected to the fields configured
                 for that site and normalized to canonical schema. Canonical
                 fields: site, matched_keyword, title, company, company_id, url, location,
-                salary, posted_date, posted_at, work_type, employment_type,
-                experience_level, job_id, requirements. Fields a site cannot
+                salary, salary_min, salary_max, posted_date, posted_at, work_type,
+                employment_type, experience_level, job_id, requirements. Fields a site cannot
                 extract are returned as null.
             errors: list of {keyword, site, reason, attempts?} for any pair
                 that failed. Presence of entries here means ok=false.

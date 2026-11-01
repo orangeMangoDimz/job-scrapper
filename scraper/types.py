@@ -12,6 +12,8 @@ class Job(TypedDict):
     url: str | None
     location: str | None
     salary: str | None
+    salary_min: float | None
+    salary_max: float | None
     posted_date: str | None
     posted_at: str | None
     work_type: str | None
@@ -30,6 +32,8 @@ JOB_FIELD_ORDER: tuple[str, ...] = (
     "url",
     "location",
     "salary",
+    "salary_min",
+    "salary_max",
     "posted_date",
     "posted_at",
     "work_type",
@@ -54,6 +58,8 @@ def empty_job(site: str, title: str, company: str) -> Job:
         url=None,
         location=None,
         salary=None,
+        salary_min=None,
+        salary_max=None,
         posted_date=None,
         posted_at=None,
         work_type=None,

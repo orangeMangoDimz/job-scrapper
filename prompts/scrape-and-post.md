@@ -13,7 +13,7 @@ The response shape is:
 ```json
 {
   "keywords": ["software engineer", "data analyst"],
-  "requested_sites": ["jobstreet", "glints", "linkedin", "indeed"],
+  "requested_sites": ["jobstreet", "glints", "linkedin", "indeed", "upwork"],
   "exit_code": 0,
   "results": [
     {
