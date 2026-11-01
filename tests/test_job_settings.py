@@ -76,7 +76,7 @@ def test_merge_does_not_change_input():
 
     merge_settings(SETTINGS, {"limit": 9, "sites": {"upwork": {"limit": 1}}})
 
-    assert SETTINGS == original
+    assert original == SETTINGS
 
 
 def test_merge_rejects_site_that_is_not_a_mapping():

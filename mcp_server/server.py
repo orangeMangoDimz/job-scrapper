@@ -387,7 +387,7 @@ def get_config() -> dict[str, Any]:
 @mcp.tool()
 def get_scrape_response_structure() -> dict[str, Any]:
     """Return canonical schema and example payload for scrape_jobs response."""
-    sample_job: dict[str, Any] = {field: None for field in JOB_FIELD_ORDER}
+    sample_job: dict[str, Any] = dict.fromkeys(JOB_FIELD_ORDER)
     sample_job["site"] = "jobstreet"
     sample_job["matched_keyword"] = "data analyst"
     sample_job["title"] = "Data Analyst"
