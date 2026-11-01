@@ -6,7 +6,7 @@ playwright==1.59.0
 playwright-stealth>=1.0.6
 pyyaml>=6.0
 pymongo>=4.0
-mcp[cli]>=1.2.0
+mcp[cli]>=1.2.0,<2
 dateparser>=1.2.0
 pytest>=8.0
 markdownify>=1.2.0
