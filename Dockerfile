@@ -86,7 +86,8 @@ FROM python:3.13-slim AS ui-server
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    UI_HOST=0.0.0.0
 
 RUN useradd --uid 1001 --create-home uiuser \
  && mkdir -p /app/output /app/logs /app/config-backups \

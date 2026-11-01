@@ -15,6 +15,7 @@ def _service() -> AuthService:
         env="prod",
         password_hash=PasswordHasher().hash(PASSWORD),
         session_secret="s" * 32,
+        domain="ui.example.com",
     )
     return AuthService(settings)
 

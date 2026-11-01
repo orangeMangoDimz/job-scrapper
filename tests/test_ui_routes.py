@@ -14,6 +14,7 @@ from ui_server.errors import McpUnavailableError
 from ui_server.settings import Settings
 
 PASSWORD = "correct horse battery"
+LOCAL_URL = "http://127.0.0.1:8090"
 BASE_CONFIG = """keywords: [devops]
 limit: 3
 sites:
@@ -80,6 +81,7 @@ def _prod_settings(tmp_path: Path) -> Settings:
         env="prod",
         password_hash=PasswordHasher().hash(PASSWORD),
         session_secret="s" * 32,
+        domain="testserver",
     )
 
 
@@ -90,7 +92,8 @@ def gateway() -> FakeGateway:
 
 @pytest.fixture
 def client(tmp_path: Path, gateway: FakeGateway):
-    with TestClient(create_app(_settings(tmp_path), gateway)) as test_client:
+    app = create_app(_settings(tmp_path), gateway)
+    with TestClient(app, base_url=LOCAL_URL) as test_client:
         yield test_client
 
 
@@ -105,6 +108,22 @@ def _run(client: TestClient) -> dict:
     response = client.post("/api/runs", json={"keywords": ["devops"], "sites": ["upwork"]})
     assert response.status_code == 202
     return response.json()["data"]
+
+
+def test_unknown_host_is_refused(client: TestClient):
+    response = client.get("/api/sites", headers={"host": "evil.example.com"})
+
+    assert response.status_code == 400
+
+
+def test_unknown_host_is_refused_in_prod(prod_client: TestClient):
+    response = prod_client.get("/api/sites", headers={"host": "evil.example.com"})
+
+    assert response.status_code == 400
+
+
+def test_health_check_host_is_allowed_in_prod(prod_client: TestClient):
+    assert prod_client.get("/health", headers={"host": "localhost:8090"}).status_code == 200
 
 
 def test_health_needs_no_login(prod_client: TestClient):
@@ -255,6 +274,7 @@ def test_prod_config_is_read_only(prod_client: TestClient):
 def test_spa_paths_fall_back_to_index(tmp_path: Path, gateway: FakeGateway):
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist" / "index.html").write_text("<html>app</html>")
-    with TestClient(create_app(_settings(tmp_path), gateway)) as test_client:
+    app = create_app(_settings(tmp_path), gateway)
+    with TestClient(app, base_url=LOCAL_URL) as test_client:
         assert "app" in test_client.get("/config").text
         assert test_client.get("/api/missing").status_code == 404

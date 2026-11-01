@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import Scope
 
 from ui_server.dependencies import Services, reject_cross_site
@@ -65,6 +66,7 @@ def create_app(settings: Settings | None = None, gateway: McpGateway | None = No
         openapi_url=None if resolved.env == "prod" else "/openapi.json",
     )
     app.state.services = services
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(resolved.allowed_hosts))
     install_error_handlers(app)
 
     @app.get("/health")

@@ -7,13 +7,14 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MIN_SESSION_SECRET_LENGTH = 32
+LOCAL_HOSTS = ("localhost", "127.0.0.1")
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="UI_", frozen=True)
 
-    env: Literal["dev", "prod"] = "dev"
-    host: str = "0.0.0.0"
+    env: Literal["dev", "prod"]
+    host: str = "127.0.0.1"
     port: int = 8090
     mcp_url: str = "http://scraper-mcp:8080/mcp"
     runs_dir: Path = Path("output/ui-runs")
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     static_dir: Path = Path("ui/dist")
     password_hash: str = ""
     session_secret: str = ""
+    domain: str = ""
     keep_runs: int = 50
 
     @model_validator(mode="after")
@@ -37,7 +39,13 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"UI_SESSION_SECRET must have at least {MIN_SESSION_SECRET_LENGTH} characters"
             )
+        if not self.domain:
+            raise ValueError("UI_DOMAIN is required in prod")
         return self
+
+    @property
+    def allowed_hosts(self) -> tuple[str, ...]:
+        return (*LOCAL_HOSTS, self.domain) if self.domain else LOCAL_HOSTS
 
     @property
     def auth_enabled(self) -> bool:

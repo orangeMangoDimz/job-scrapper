@@ -30,6 +30,7 @@ services:
       - UI_MCP_URL=http://host.docker.internal:8080/mcp
       - UI_PASSWORD_HASH=${UI_PASSWORD_HASH:-}
       - UI_SESSION_SECRET=${UI_SESSION_SECRET:-}
+      - UI_DOMAIN=${UI_DOMAIN:-}
       - FORWARDED_ALLOW_IPS=*
 
   # SERVICE: caddy — public HTTPS entry for scraper-ui; certificates renew automatically
