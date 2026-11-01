@@ -1,7 +1,7 @@
 # What is this
 
-Personal job scraper for Indonesian job boards (JobStreet, Glints, LinkedIn,
-Indeed). Flow: a Playwright/Python scraper is exposed as an **MCP HTTP server**
+Personal job scraper for job boards (JobStreet, Glints, LinkedIn, Indeed,
+Upwork). Flow: a Playwright/Python scraper is exposed as an **MCP HTTP server**
 (`scraper-mcp`, port 8080); a **Discord cron bot** (claude-code + supercronic)
 runs on a schedule, calls the MCP `scrape_jobs` tool, formats results, posts
 each job to a Discord channel, and records the run in **MongoDB**.
@@ -9,6 +9,8 @@ each job to a Discord channel, and records the run in **MongoDB**.
 Four Dockerfile stages: `scraper-cli` (`python -m scraper`),
 `mcp-server` (`python -m mcp_server.server`), `bot`, plus `mongo` (MongoDB 7).
 Config-driven by `config.yaml` (keywords, sites, filters, bot schedule).
+
+Upwork is API-only. It uses the visitor GraphQL endpoint with no login and has no HTML fallback, so a failure shows up in `errors` with 0 jobs.
 
 # How to run locally
 
