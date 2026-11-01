@@ -7,7 +7,7 @@ from ui_server.errors import InvalidPasswordError, TooManyAttemptsError
 from ui_server.services.auth_service import MAX_FAILED_ATTEMPTS, AuthService, LoginLimiter
 from ui_server.settings import Settings
 
-PASSWORD = "correct horse battery"
+PASSWORD = "correct horse battery"  # pragma: allowlist secret
 
 
 def _service() -> AuthService:

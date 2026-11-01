@@ -11,6 +11,8 @@ from ui_server.schema.config import ConfigUpdateRequest
 from ui_server.services.config_store import ConfigStore, deep_merge
 from ui_server.settings import Settings
 
+FAKE_HASH = "hash"  # pragma: allowlist secret
+
 BASE = """# top comment
 keywords:
   - devops
@@ -153,7 +155,7 @@ def test_request_accepts_empty_proxy_url():
 
 def test_update_is_refused_in_prod(tmp_path: Path):
     settings = Settings(
-        env="prod", password_hash="hash", session_secret="s" * 32, domain="ui.example.com"
+        env="prod", password_hash=FAKE_HASH, session_secret="s" * 32, domain="ui.example.com"
     )
 
     with pytest.raises(ConfigReadOnlyError):
@@ -166,7 +168,7 @@ def test_locked_paths_lists_patch_fields(tmp_path: Path):
 
 def test_locked_paths_is_empty_in_prod():
     settings = Settings(
-        env="prod", password_hash="hash", session_secret="s" * 32, domain="ui.example.com"
+        env="prod", password_hash=FAKE_HASH, session_secret="s" * 32, domain="ui.example.com"
     )
 
     assert ConfigStore(settings).locked_paths() == ()

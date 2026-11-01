@@ -13,8 +13,9 @@ from ui_server.app import create_app
 from ui_server.errors import McpUnavailableError
 from ui_server.settings import Settings
 
-PASSWORD = "correct horse battery"
+PASSWORD = "correct horse battery"  # pragma: allowlist secret
 LOCAL_URL = "http://127.0.0.1:8090"
+PROXY_WITH_LOGIN = "socks5://user:secret@host:1080"  # pragma: allowlist secret
 BASE_CONFIG = """keywords: [devops]
 limit: 3
 sites:
@@ -212,7 +213,7 @@ def test_config_read_shows_locked_fields(client: TestClient):
 
 
 def test_config_read_hides_proxy_credentials(client: TestClient, gateway: FakeGateway):
-    gateway.config = {**CONFIG, "proxy": "socks5://user:secret@host:1080"}
+    gateway.config = {**CONFIG, "proxy": PROXY_WITH_LOGIN}
 
     data = client.get("/api/config").json()["data"]
 

@@ -87,6 +87,6 @@ def test_missing_file_waits_for_it(tmp_path: Path):
 
 
 def test_redact_hides_url_credentials():
-    line = "using proxy: socks5://user:secret@host:1080"
+    line = "using proxy: socks5://user:secret@host:1080"  # pragma: allowlist secret
 
     assert redact(line) == "using proxy: socks5://***@host:1080"
