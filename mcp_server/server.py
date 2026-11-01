@@ -664,6 +664,7 @@ def test_proxy_connection(
 def scrape_jobs(
     sites: list[str] | None = None,
     keywords: list[str] | None = None,
+    save_run: bool = True,
 ) -> dict[str, Any]:
     """Run the job scraper and return aggregated results.
 
@@ -673,6 +674,8 @@ def scrape_jobs(
         keywords: optional list of keywords to scrape. When omitted, runs every
             keyword in config.yaml. Useful to ad-hoc query a single term without
             editing config.yaml.
+        save_run: when false, return the results without storing the run in
+            Mongo, so it never reaches the scrape history. mongo_id is then null.
 
     Returns:
         dict with keys:
@@ -777,6 +780,10 @@ def scrape_jobs(
     )
 
     _write_status(result, duration)
+
+    if not save_run:
+        log.info("scrape_jobs: save_run is off, skipping mongo insert")
+        return {**result, "mongo_id": None}
 
     # one document per run; the bot later patches it with Discord columns
     mongo_id: str | None = None
