@@ -471,7 +471,7 @@ http://localhost:5174:
     cd ui && bun install && bun run dev
 
 - Runs go through `scraper-mcp`, one at a time, with no stop button
-- Each run is saved to `output/ui-runs/<run_id>/`, last 50 kept, and also to Mongo
+- Each run is saved to `output/ui-runs/<run_id>/`, last 50 kept, and never to Mongo
 - Dev config edits write `config.yaml` and refresh `/tmp/config.dev.yaml`. Backups go
   to `config-backups/`. Fields set in `config.dev.patch.yaml` are locked
 - Prod is public through Caddy with one password. Config is read-only there

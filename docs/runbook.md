@@ -192,7 +192,8 @@ Skip `update_config` entirely; use `scrape_jobs` with explicit args:
 {"keywords": ["fullstack engineer"], "sites": ["linkedin", "jobstreet"]}
 ```
 
-The on-disk config is unchanged; only the run is overridden.
+The on-disk config is unchanged; only the run is overridden. Add `"save_run": false`
+to keep the run out of MongoDB as well.
 
 ## "Show me the current settings"
 

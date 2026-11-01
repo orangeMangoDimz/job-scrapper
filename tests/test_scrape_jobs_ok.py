@@ -242,6 +242,34 @@ def test_scrape_jobs_sets_note_on_error(mock_read, mock_read_raw, mock_load, moc
     assert doc["note"] is not None and "jobstreet" in doc["note"]
 
 
+@patch("mcp_server.server.mongo")
+@patch("mcp_server.server.run_scraper", return_value=0)
+@patch("mcp_server.server._load_config")
+@patch("mcp_server.server._read_site_raw_output", return_value=None)
+@patch("mcp_server.server._read_site_output")
+def test_scrape_jobs_skips_mongo_when_save_run_is_false(
+    mock_read, mock_read_raw, mock_load, mock_run, mock_mongo
+):
+    mock_load.return_value = _make_config()
+    mock_read.return_value = {
+        "keyword": "data analyst",
+        "fields": ["title"],
+        "count": 1,
+        "jobs": [{"title": "A"}],
+        "max_age_hours": 24,
+        "filter": None,
+    }
+
+    from mcp_server.server import scrape_jobs
+
+    result = scrape_jobs(keywords=["data analyst"], sites=["jobstreet"], save_run=False)
+
+    mock_mongo.insert_run.assert_not_called()
+    assert result["mongo_id"] is None
+    assert result["ok"] is True
+    assert result["results"][0]["sites"][0]["count"] == 1
+
+
 def test_get_scrape_response_structure_exposes_canonical_fields():
     from mcp_server.server import get_scrape_response_structure
 

@@ -78,10 +78,12 @@ def test_read_raises_when_nothing_is_cached():
         asyncio.run(ScraperClient(gateway).read_config())
 
 
-def test_scrape_jobs_sends_sites_and_keywords():
+def test_scrape_jobs_sends_sites_and_keywords_without_saving_the_run():
     gateway = FakeGateway()
     gateway.responses = [{"ok": True}]
 
     asyncio.run(ScraperClient(gateway).scrape_jobs(("upwork",), ("django",)))
 
-    assert gateway.calls == [("scrape_jobs", {"sites": ["upwork"], "keywords": ["django"]})]
+    assert gateway.calls == [
+        ("scrape_jobs", {"sites": ["upwork"], "keywords": ["django"], "save_run": False})
+    ]
