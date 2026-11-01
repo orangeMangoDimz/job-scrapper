@@ -8,6 +8,8 @@ PROMPT=/workspace/scraper-bot/prompts/scrape-and-post.md
 echo "[$(date)] starting multi-site scraper run..." | tee -a "$LOG"
 cd /workspace/scraper-bot
 # --dangerously-skip-permissions: needed for unattended cron — no TTY to approve prompts
+# --disallowedTools: the run reads untrusted job text, so it must not change or restore
+#   scraper config even if that text tries to make it
 # --verbose --output-format stream-json: emit one JSON event per step (tool calls,
 #   assistant messages, result) so the run's internals stream live to the log.
 #   Default text mode buffers and prints only the final result at the very end;
@@ -18,6 +20,7 @@ cd /workspace/scraper-bot
   claude \
     --model claude-haiku-4-5-20251001 \
     --dangerously-skip-permissions \
+    --disallowedTools "mcp__job-scraper__update_config,mcp__job-scraper__restore_config" \
     --verbose \
     --output-format stream-json \
     -p "$(cat "$PROMPT")" \
