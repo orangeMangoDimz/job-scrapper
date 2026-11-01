@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { RunDetail, RunRecord } from '@/modules/runs/domain/entities/Run'
 import { provideRunUseCases } from '@/modules/runs/presentation/stores/runUseCases'
-import { POLL_INTERVAL_MS, useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
+import {
+  MAX_POLL_FAILURES,
+  POLL_INTERVAL_MS,
+  useRunStore,
+} from '@/modules/runs/presentation/stores/useRunStore'
 
 const getOptions = { execute: vi.fn() }
 const getRun = { execute: vi.fn() }
@@ -90,6 +94,86 @@ describe('useRunStore', () => {
     await store.start(['django'], ['upwork'])
 
     expect(store.actionError).toBe('A scrape is already running.')
+    expect(store.isRunning).toBe(false)
+  })
+
+  it('keeps following a run through a failed poll', async () => {
+    startRun.execute.mockResolvedValue(record('running'))
+    getRun.execute
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce(detail('succeeded'))
+    const store = useRunStore()
+    await store.start(['django'], ['upwork'])
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    expect(store.isRunning).toBe(true)
+    expect(store.actionError).toBeNull()
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    expect(store.isRunning).toBe(false)
+    expect(store.selected?.record.status).toBe('succeeded')
+  })
+
+  it('gives up after repeated failed polls', async () => {
+    startRun.execute.mockResolvedValue(record('running'))
+    getRun.execute.mockRejectedValue(new Error('timeout'))
+    const store = useRunStore()
+    await store.start(['django'], ['upwork'])
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * MAX_POLL_FAILURES)
+
+    expect(store.isRunning).toBe(false)
+    expect(store.actionError).toContain('Lost track')
+    expect(getRun.execute).toHaveBeenCalledTimes(MAX_POLL_FAILURES)
+  })
+
+  it('counts only failures in a row', async () => {
+    startRun.execute.mockResolvedValue(record('running'))
+    const failures = Array.from({ length: MAX_POLL_FAILURES - 1 }, () => new Error('timeout'))
+    for (const failure of [...failures, null, ...failures]) {
+      if (failure === null) {
+        getRun.execute.mockResolvedValueOnce(detail('running'))
+      } else {
+        getRun.execute.mockRejectedValueOnce(failure)
+      }
+    }
+    getRun.execute.mockResolvedValueOnce(detail('succeeded'))
+    const store = useRunStore()
+    await store.start(['django'], ['upwork'])
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * (MAX_POLL_FAILURES * 2))
+
+    expect(store.selected?.record.status).toBe('succeeded')
+  })
+
+  it('keeps following a started run when history fails to refresh', async () => {
+    startRun.execute.mockResolvedValue(record('running'))
+    listRuns.execute.mockRejectedValue(new Error('timeout'))
+    const store = useRunStore()
+
+    await store.start(['django'], ['upwork'])
+
+    expect(store.isRunning).toBe(true)
+    expect(store.actionError).toContain('history')
+  })
+
+  it('ignores a poll that returns after polling stopped', async () => {
+    startRun.execute.mockResolvedValue(record('running'))
+    let finishPoll: (value: RunDetail) => void = () => undefined
+    getRun.execute.mockReturnValueOnce(
+      new Promise<RunDetail>((resolve) => {
+        finishPoll = resolve
+      }),
+    )
+    const store = useRunStore()
+    await store.start(['django'], ['upwork'])
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+
+    store.stopPolling()
+    finishPoll(detail('running'))
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3)
+
+    expect(getRun.execute).toHaveBeenCalledTimes(1)
     expect(store.isRunning).toBe(false)
   })
 

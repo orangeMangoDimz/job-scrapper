@@ -6,7 +6,10 @@ import { toErrorMessage } from '@/shared/utils/errorMessage'
 import type { LoadStatus } from '@/shared/utils/loadStatus'
 
 export const POLL_INTERVAL_MS = 2000
+export const MAX_POLL_FAILURES = 5
 const FALLBACK_ERROR_MESSAGE = 'Something went wrong. Try again.'
+const LOST_RUN_MESSAGE = 'Lost track of this run. Reload the page to check it.'
+const HISTORY_ERROR_MESSAGE = 'Could not refresh the run history.'
 
 export const useRunStore = defineStore('runs', () => {
   const status = ref<LoadStatus>('idle')
@@ -17,16 +20,38 @@ export const useRunStore = defineStore('runs', () => {
   const errorMessage = ref<string | null>(null)
   const actionError = ref<string | null>(null)
   let pollTimer: ReturnType<typeof setTimeout> | null = null
+  let pollGeneration = 0
+  let pollFailures = 0
 
   const isRunning = computed(() => activeRunId.value !== null)
 
   async function refreshHistory(): Promise<void> {
-    runs.value = await requireRunUseCases().listRuns.execute()
+    try {
+      runs.value = await requireRunUseCases().listRuns.execute()
+    } catch {
+      actionError.value = HISTORY_ERROR_MESSAGE
+    }
+  }
+
+  function schedulePoll(id: string): void {
+    const generation = pollGeneration
+    pollTimer = setTimeout(() => void poll(id, generation), POLL_INTERVAL_MS)
   }
 
   function followRun(id: string): void {
     activeRunId.value = id
-    pollTimer = setTimeout(() => void poll(id), POLL_INTERVAL_MS)
+    pollFailures = 0
+    schedulePoll(id)
+  }
+
+  function handlePollFailure(id: string): void {
+    pollFailures += 1
+    if (pollFailures < MAX_POLL_FAILURES) {
+      schedulePoll(id)
+      return
+    }
+    actionError.value = LOST_RUN_MESSAGE
+    activeRunId.value = null
   }
 
   async function load(): Promise<void> {
@@ -51,28 +76,35 @@ export const useRunStore = defineStore('runs', () => {
     }
   }
 
-  async function poll(id: string): Promise<void> {
+  async function poll(id: string, generation: number): Promise<void> {
+    let detail: RunDetail
     try {
-      const detail = await requireRunUseCases().getRun.execute(id)
-      if (detail.record.status === 'running') {
-        followRun(id)
-        return
+      detail = await requireRunUseCases().getRun.execute(id)
+    } catch {
+      if (generation === pollGeneration) {
+        handlePollFailure(id)
       }
-      selected.value = detail
-      activeRunId.value = null
-      await refreshHistory()
-    } catch (error) {
-      actionError.value = toErrorMessage(error, FALLBACK_ERROR_MESSAGE)
-      activeRunId.value = null
+      return
     }
+    if (generation !== pollGeneration) {
+      return
+    }
+    pollFailures = 0
+    if (detail.record.status === 'running') {
+      schedulePoll(id)
+      return
+    }
+    selected.value = detail
+    activeRunId.value = null
+    await refreshHistory()
   }
 
   async function start(keywords: string[], sites: string[]): Promise<void> {
     actionError.value = null
     try {
       const record = await requireRunUseCases().startRun.execute(keywords, sites)
-      await refreshHistory()
       followRun(record.id)
+      await refreshHistory()
     } catch (error) {
       actionError.value = toErrorMessage(error, FALLBACK_ERROR_MESSAGE)
     }
@@ -87,6 +119,7 @@ export const useRunStore = defineStore('runs', () => {
   }
 
   function stopPolling(): void {
+    pollGeneration += 1
     if (pollTimer !== null) {
       clearTimeout(pollTimer)
       pollTimer = null
