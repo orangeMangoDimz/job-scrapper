@@ -6,10 +6,17 @@ from scraper.api.client import ApiClient
 
 
 class FakeResponse:
-    def __init__(self, status_code: int = 200, payload: Any = None, text: str = "") -> None:
+    def __init__(
+        self,
+        status_code: int = 200,
+        payload: Any = None,
+        text: str = "",
+        cookies: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
         self._payload = payload
         self.text = text
+        self.cookies = cookies or {}
 
     def json(self) -> Any:
         if self._payload is None:

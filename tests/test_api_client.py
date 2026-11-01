@@ -218,3 +218,16 @@ def test_graphql_data_raises_on_missing_field():
     with pytest.raises(ApiError) as err:
         graphql_data({"data": {}}, "search")
     assert err.value.code == "graphql_error"
+
+
+def test_get_cookie_reads_the_response_cookie():
+    client, session = make_client([FakeResponse(cookies={"token": "abc"})])
+
+    assert client.get_cookie("https://example.test/", "token") == "abc"
+    assert session.calls[0][0] == "GET"
+
+
+def test_get_cookie_returns_none_when_the_cookie_is_missing():
+    client, _ = make_client([FakeResponse()])
+
+    assert client.get_cookie("https://example.test/", "token") is None
