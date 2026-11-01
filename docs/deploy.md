@@ -42,6 +42,7 @@ Repo → Settings → Secrets and variables → Actions → **Secrets** tab.
 | `SSH_HOST` | all deploy jobs | `43.157.226.237` |
 | `SSH_USER` | all deploy jobs | `ubuntu` |
 | `SSH_PRIVATE_KEY` | all deploy jobs | private key for VPS SSH |
+| `GHCR_PULL_TOKEN` | all deploy jobs | GitHub token with `read:packages` scope, so the VPS can pull private images |
 | `DISCORD_BOT_TOKEN` | deploy-bot | Discord application bot token (with Send Messages perm in target channel) |
 | `DISCORD_CHANNEL_ID` | deploy-bot | Discord channel ID where job posts go |
 | `UI_PASSWORD_HASH` | deploy-ui | Required when `UI_DOMAIN` is set. Argon2 hash of the UI password, see `.env.example` |
@@ -113,19 +114,13 @@ and a DNS record pointing to the VPS.
 
 ## ghcr.io image visibility
 
-The first push creates each package as **private**. To let the VPS pull
-without authentication:
+The first push creates each package as **private**, and they stay private.
+Each deploy job logs in to ghcr.io on the VPS with `GHCR_PULL_TOKEN`, pulls the
+image, and logs out when it ends.
 
-1. GitHub profile → **Packages** → click each package
-2. **Package settings** → **Change visibility** → **Public**
-
-Alternatively, keep them private and run once on the VPS:
-
-```bash
-echo $PERSONAL_ACCESS_TOKEN | docker login ghcr.io -u <your-username> --password-stdin
-```
-
-with a token that has `read:packages` scope.
+Do not rely on a saved `docker login` on the VPS. The job-agent backend and
+frontend deploys run on the same VPS and log out of ghcr.io when they finish,
+which removes any saved login.
 
 ## Changing config
 
