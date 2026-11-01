@@ -60,7 +60,7 @@ anyone with read access). Use these for non-secret config:
 | `CLAUDE_CONFIG_FILE` | deploy-bot | `/home/ubuntu/.claude.json` (host file mounted into bot) |
 | `UI_DOMAIN` | deploy-ui | Public domain for the UI, with DNS pointing to the VPS |
 | `MCP_BIND_HOST` | all deploy jobs | Optional. Docker gateway IP of the VPS, default `172.17.0.1` |
-| `SCRAPER_PROXY_URL` | `deploy-mcp` | Required. Proxy URL for scrapes, such as `socks5://localhost:1080`. The deploy fails when it is missing or empty |
+| `SCRAPER_PROXY_URL` | `deploy-mcp` | Required. Proxy URL for scrapes, such as `socks5://localhost:1080`. A URL with a password belongs in a secret of the same name, because variables are visible in logs. The deploy fails when it is missing or empty |
 
 ## Claude Code authentication
 

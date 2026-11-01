@@ -194,7 +194,7 @@ jobs:
           MONGO_DB_NAME: ${{ vars.MONGO_DB_NAME || 'job_scraper' }}
           MONGO_COLLECTION_NAME: ${{ vars.MONGO_COLLECTION_NAME || 'scrape_runs' }}
           MCP_BIND_HOST: ${{ vars.MCP_BIND_HOST || '172.17.0.1' }}
-          SCRAPER_PROXY_URL: ${{ vars.SCRAPER_PROXY_URL }}
+          SCRAPER_PROXY_URL: ${{ secrets.SCRAPER_PROXY_URL || vars.SCRAPER_PROXY_URL }}
 
   # 4. SSH into VPS → pull new bot image → restart container (runs after build-bot + deploy-mcp)
   deploy-bot:

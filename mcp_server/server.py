@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP  # type: ignore[import-untyped]
 from starlette.concurrency import run_in_threadpool
@@ -27,6 +27,7 @@ from scraper.job_settings import (
     load_app_config,
 )
 from scraper.log import get_logger as _get_logger
+from scraper.log import redact_proxy_url as _redact_proxy_url
 from scraper.runner import run as run_scraper
 from scraper.types import JOB_FIELD_ORDER
 
@@ -160,25 +161,6 @@ def _save_result(save: Callable[[], StoredSettings]) -> dict[str, Any]:
     except ConfigError as exc:
         return {"ok": False, "reason": "invalid", "message": str(exc)}
     return {"ok": True, **_to_payload(stored)}
-
-
-def _redact_proxy_url(proxy_url: str) -> str:
-    """Hide proxy password in logged/returned strings."""
-    try:
-        p = urlparse(proxy_url)
-        if not p.hostname:
-            return proxy_url
-        host = p.hostname
-        port = f":{p.port}" if p.port else ""
-        if p.username is not None and p.username != "":
-            netloc = f"{p.username}:***@{host}{port}"
-        elif p.password is not None:
-            netloc = f"***@{host}{port}"
-        else:
-            netloc = f"{host}{port}"
-        return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
-    except Exception:
-        return "<unparseable proxy url>"
 
 
 def _probe_proxy_http(proxy_url: str, test_url: str) -> dict[str, Any]:

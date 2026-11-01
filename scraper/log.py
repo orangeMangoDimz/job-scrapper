@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import logging.handlers
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 _LOGGER_NAME = "job-scraper"
 _FMT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -45,3 +46,22 @@ def get_logger() -> logging.Logger:
 
     _initialized = True
     return logger
+
+
+def redact_proxy_url(proxy_url: str) -> str:
+    """Hide proxy password in logged/returned strings."""
+    try:
+        p = urlparse(proxy_url)
+        if not p.hostname:
+            return proxy_url
+        host = p.hostname
+        port = f":{p.port}" if p.port else ""
+        if p.username is not None and p.username != "":
+            netloc = f"{p.username}:***@{host}{port}"
+        elif p.password is not None:
+            netloc = f"***@{host}{port}"
+        else:
+            netloc = f"{host}{port}"
+        return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
+    except Exception:
+        return "<unparseable proxy url>"

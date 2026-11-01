@@ -50,3 +50,15 @@ def test_get_logger_creates_logs_dir(tmp_path, monkeypatch):
 
     log_mod.get_logger()
     assert (tmp_path / "logs").is_dir()
+
+
+def test_redact_proxy_url_hides_password():
+    from scraper.log import redact_proxy_url
+
+    url = "http://user:secret@proxy.example.com:8080/path"  # pragma: allowlist secret
+
+    redacted = redact_proxy_url(url)
+
+    assert "secret" not in redacted
+    assert "user:***" in redacted
+    assert "proxy.example.com:8080" in redacted

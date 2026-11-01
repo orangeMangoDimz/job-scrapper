@@ -4,7 +4,7 @@ from __future__ import annotations
 import cloudscraper
 
 from ..config import ACCEPT_LANGUAGE, USER_AGENT
-from ..log import get_logger
+from ..log import get_logger, redact_proxy_url
 from .base import FetchAttempt, detect_challenge
 
 _LOG = get_logger()
@@ -18,7 +18,7 @@ class CloudscraperFetcher:
 
     def fetch(self, url: str) -> tuple[str | None, FetchAttempt]:
         if self._proxy:
-            _LOG.info("[cloudscraper] using proxy: %s", self._proxy)
+            _LOG.info("[cloudscraper] using proxy: %s", redact_proxy_url(self._proxy))
 
         try:
             scraper = cloudscraper.create_scraper(  # type: ignore[attr-defined]
