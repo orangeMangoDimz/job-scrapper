@@ -1,10 +1,17 @@
+name: scraper
+
 services:
   # SERVICE: output-init — fixes output dir ownership before scraper runs (Playwright image runs as root)
   output-init:
     image: mcr.microsoft.com/playwright/python:v1.59.0-noble
     container_name: job-scraper-init
     user: "0:0"
-    entrypoint: ["sh", "-c", "chown -R pwuser:pwuser /out"]
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /out/ui-runs && chown -R pwuser:pwuser /out && chown -R ${UI_UID:-1001}:${UI_GID:-1001} /out/ui-runs",
+      ]
     restart: "no"
     volumes:
       - ./output:/out
@@ -49,6 +56,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      - default
+      - job-net # lets the job-agent backend reach Mongo as job-scraper-mongo:27017
 
   # SERVICE: scraper-mcp — long-running MCP HTTP server; profile-gated so `docker compose up` skips it by default
   scraper-mcp:
@@ -76,10 +86,43 @@ services:
     volumes:
       - ./output:/app/output
       - ./docs:/app/docs:ro
+      - scraper-logs:/app/logs
     environment:
       - MONGO_URI=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD}@mongo:27017
       - MONGO_DB_NAME=${MONGO_DB_NAME:-job_scraper}
       - MONGO_COLLECTION_NAME=${MONGO_COLLECTION_NAME:-scrape_runs}
+    networks:
+      - default
+      - job-net # lets the job-agent backend reach MCP as http://job-scraper-mcp:8080/mcp
+
+  # SERVICE: scraper-ui — FastAPI + Vue control panel; profile-gated, needs scraper-mcp running
+  scraper-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ui-server
+    image: job-scraper-ui:latest
+    container_name: job-scraper-ui
+    restart: unless-stopped
+    profiles: ["ui"]
+    depends_on:
+      output-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ./output:/app/output
+      - scraper-logs:/app/logs:ro
 
   # SERVICE: bot — cron bot; runs claude-code on a schedule; profile-gated so `docker compose up` skips it by default
   bot:
@@ -105,5 +148,13 @@ services:
       - ${CLAUDE_CONFIG_FILE:-~/.claude.json}:/home/node/.claude.json
       - ./output:/workspace/output
 
+networks:
+  # shared with the job-agent backend; create once with: docker network create job-net
+  job-net:
+    external: true
+
 volumes:
   mongo-data:
+    # pinned to the pre-rename project volume so existing Mongo data is kept
+    name: job-scrapper_mongo-data
+  scraper-logs:

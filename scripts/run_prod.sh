@@ -8,6 +8,7 @@ set -euo pipefail
 #   ./scripts/run_prod.sh           # both mcp + bot
 #   ./scripts/run_prod.sh mcp       # MCP server only
 #   ./scripts/run_prod.sh bot       # bot only
+#   ./scripts/run_prod.sh ui        # MCP server + UI + Caddy (needs UI_* values in .env)
 
 # --- config ---
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,9 +28,10 @@ fi
 case "$ARG" in
   mcp)  PROFILES="--profile mcp" ;;
   bot)  PROFILES="--profile bot" ;;
+  ui)   PROFILES="--profile mcp --profile ui" ;;
   all)  PROFILES="--profile mcp --profile bot" ;;
   *)
-    echo "Usage: $0 [mcp|bot]" >&2
+    echo "Usage: $0 [mcp|bot|ui]" >&2
     exit 1
     ;;
 esac

@@ -54,6 +54,7 @@ Thumbs.db
 # Project-specific scraper artifacts
 output/*
 !output/.gitkeep
+config-backups/
 
 # Logs
 logs/*
