@@ -166,10 +166,19 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME,MCP_BIND_HOST,SCRAPER_PROXY_URL
+          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME,MCP_BIND_HOST,SCRAPER_PROXY_URL,GHCR_USERNAME,GHCR_PULL_TOKEN
           script: |
             set -euo pipefail
             : "${SCRAPER_PROXY_URL:?Set the SCRAPER_PROXY_URL GitHub secret or variable}"
+            : "${GHCR_PULL_TOKEN:?Set the GHCR_PULL_TOKEN GitHub secret}"
+
+            # packages are private; other deploys on this VPS log out, so a saved login is not safe
+            trap 'docker logout ghcr.io >/dev/null' EXIT
+            printf '%s' "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
+            # pull first: a failed pull must not stop the running stack
+            (cd ~/scraper && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile mcp pull)
+
             # one-time migration: stop stack from pre-rename dir ~/job-scrapper (volume kept)
             if [ -d ~/job-scrapper ]; then
               if [ -f ~/job-scrapper/.env ] && [ ! -f ~/scraper/.env ]; then cp ~/job-scrapper/.env ~/scraper/.env; fi
@@ -184,10 +193,11 @@ jobs:
             docker network inspect job-net >/dev/null 2>&1 || docker network create job-net
 
             C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-            $C --profile mcp pull
             $C --profile mcp up -d --no-build
             $C ps
         env:
+          GHCR_USERNAME: ${{ github.repository_owner }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           MCP_IMAGE: ${{ needs.build-mcp.outputs.image_tag_sha }}
           MONGO_ROOT_USER: ${{ vars.MONGO_ROOT_USER || 'admin' }}
           MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
@@ -226,19 +236,27 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: BOT_IMAGE,DISCORD_BOT_TOKEN,DISCORD_CHANNEL_ID,CLAUDE_CONFIG_DIR,CLAUDE_CONFIG_FILE,TZ,MCP_BIND_HOST
+          envs: BOT_IMAGE,DISCORD_BOT_TOKEN,DISCORD_CHANNEL_ID,CLAUDE_CONFIG_DIR,CLAUDE_CONFIG_FILE,TZ,MCP_BIND_HOST,GHCR_USERNAME,GHCR_PULL_TOKEN
           script: |
             set -euo pipefail
+            : "${GHCR_PULL_TOKEN:?Set the GHCR_PULL_TOKEN GitHub secret}"
             cd ~/scraper
+
+            trap 'docker logout ghcr.io >/dev/null' EXIT
+            printf '%s' "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
+            C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+            # pull first: a failed pull must not stop the running bot
+            $C --profile bot pull
 
             # one-time migration: remove legacy docker run container (different name)
             docker rm -f scraper-bot 2>/dev/null || true
 
-            C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-            $C --profile bot pull
             $C --profile bot up -d --no-build
             $C ps
         env:
+          GHCR_USERNAME: ${{ github.repository_owner }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           BOT_IMAGE: ${{ needs.build-bot.outputs.image_tag_sha }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
@@ -278,16 +296,22 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: UI_IMAGE,UI_PASSWORD_HASH,UI_SESSION_SECRET,UI_DOMAIN,MCP_BIND_HOST
+          envs: UI_IMAGE,UI_PASSWORD_HASH,UI_SESSION_SECRET,UI_DOMAIN,MCP_BIND_HOST,GHCR_USERNAME,GHCR_PULL_TOKEN
           script: |
             set -euo pipefail
+            : "${GHCR_PULL_TOKEN:?Set the GHCR_PULL_TOKEN GitHub secret}"
             cd ~/scraper
+
+            trap 'docker logout ghcr.io >/dev/null' EXIT
+            printf '%s' "$GHCR_PULL_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
             C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
             $C --profile ui pull
             $C --profile ui up -d --no-build
             $C ps
         env:
+          GHCR_USERNAME: ${{ github.repository_owner }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           UI_IMAGE: ${{ needs.build-ui.outputs.image_tag_sha }}
           UI_PASSWORD_HASH: ${{ secrets.UI_PASSWORD_HASH }}
           UI_SESSION_SECRET: ${{ secrets.UI_SESSION_SECRET }}
