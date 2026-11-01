@@ -43,7 +43,6 @@ def test_dev_needs_no_secrets():
     settings = Settings(env="dev")
 
     assert settings.auth_enabled is False
-    assert settings.config_read_only is False
     assert settings.cookie_secure is False
 
 
@@ -57,11 +56,10 @@ def test_prod_refuses_short_session_secret():
         Settings(env="prod", password_hash=FAKE_HASH, session_secret=SHORT_SECRET, domain=DOMAIN)
 
 
-def test_prod_turns_on_login_and_read_only_config():
+def test_prod_turns_on_login():
     settings = Settings(
         env="prod", password_hash=FAKE_HASH, session_secret=STRONG_SECRET, domain=DOMAIN
     )
 
     assert settings.auth_enabled is True
-    assert settings.config_read_only is True
     assert settings.cookie_secure is True

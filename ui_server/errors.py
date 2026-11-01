@@ -41,11 +41,6 @@ class ConfigConflictError(AppError):
     default_message = "These settings changed somewhere else. Reload and try again."
 
 
-class ConfigReadOnlyError(AppError):
-    status_code = 403
-    default_message = "Config is read-only here. Change it through git and deploy."
-
-
 class RunNotFoundError(AppError):
     status_code = 404
     default_message = "Run not found."

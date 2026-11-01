@@ -7,7 +7,6 @@ from fastapi import Depends, Request
 
 from ui_server.errors import CrossSiteRequestError, NotSignedInError
 from ui_server.services.auth_service import SESSION_COOKIE, AuthService
-from ui_server.services.config_store import ConfigStore
 from ui_server.services.mcp_gateway import ScraperClient
 from ui_server.services.run_service import RunService
 from ui_server.services.run_store import RunStore
@@ -23,7 +22,6 @@ class Services:
     scraper: ScraperClient
     run_store: RunStore
     run_service: RunService
-    config_store: ConfigStore
     auth: AuthService
 
 

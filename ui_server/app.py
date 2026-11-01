@@ -14,7 +14,6 @@ from ui_server.dependencies import Services, reject_cross_site
 from ui_server.errors import install_error_handlers
 from ui_server.routes import auth, config, logs, runs, sites
 from ui_server.services.auth_service import AuthService
-from ui_server.services.config_store import ConfigStore
 from ui_server.services.mcp_gateway import HttpMcpGateway, McpGateway, ScraperClient
 from ui_server.services.run_service import RunService
 from ui_server.services.run_store import RunStore
@@ -43,7 +42,6 @@ def _build_services(settings: Settings, gateway: McpGateway) -> Services:
         scraper=scraper,
         run_store=run_store,
         run_service=RunService(run_store, scraper),
-        config_store=ConfigStore(settings),
         auth=AuthService(settings),
     )
 
