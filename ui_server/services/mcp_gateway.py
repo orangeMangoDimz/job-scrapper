@@ -78,7 +78,7 @@ class ScraperClient:
     async def scrape_jobs(
         self, sites: tuple[str, ...], keywords: tuple[str, ...]
     ) -> dict[str, Any]:
-        arguments = {"sites": list(sites), "keywords": list(keywords)}
+        arguments = {"sites": list(sites), "keywords": list(keywords), "save_run": False}
         return await self._gateway.call("scrape_jobs", arguments, SCRAPE_TIMEOUT_SECONDS)
 
     async def read_sites(self) -> CachedRead:
