@@ -68,7 +68,7 @@ def _fetch_requirements(
     scraper: Scraper,
     detail: Callable[[Job], str | None] | None = None,
 ) -> None:
-    if "requirements" not in fields or not jobs:
+    if "requirements" not in fields or not jobs or scraper.api_only:
         return
 
     def _from_page(job: Job) -> str | None:
@@ -107,6 +107,25 @@ def _fetch_requirements(
                 jobs[idx]["requirements"] = fut.result()
             except Exception:
                 jobs[idx]["requirements"] = None
+
+
+def _write_api_failure(json_path: Path, raw_path: Path, keyword: str, reason: str) -> None:
+    error = f"api failed: {reason}"
+    json_path.write_text(
+        json.dumps(
+            {
+                "error": error,
+                "keyword": keyword,
+                "source": "api",
+                "fallback_reason": None,
+            },
+            indent=2,
+        )
+    )
+    # same reset as _html_jobs: a stale raw file must not be credited to this run
+    raw_path.write_text(
+        json.dumps({"keyword": keyword, "count": 0, "jobs": [], "error": error}, indent=2)
+    )
 
 
 def _html_jobs(
@@ -184,13 +203,19 @@ def run_one(
         # third-party response bodies or exception text (which can include proxy details)
         except ApiError as exc:
             fallback_reason = exc.code
-            _LOG.warning("[%s] api failed (%s); falling back to html", label, exc.code)
+            _LOG.warning("[%s] api failed (%s)", label, exc.code)
             _LOG.debug("[%s] api failure detail: %s", label, exc.detail)
         except Exception as exc:  # unexpected response shape must not kill the pair
             fallback_reason = f"unexpected_error:{type(exc).__name__}"
-            _LOG.exception("[%s] api crashed; falling back to html", label)
+            _LOG.exception("[%s] api crashed", label)
+
+    if jobs is None and scraper.api_only:
+        _write_api_failure(json_path, raw_path, keyword, fallback_reason or "api_disabled")
+        return
 
     if jobs is None:
+        if fallback_reason is not None:
+            _LOG.warning("[%s] falling back to html (%s)", label, fallback_reason)
         jobs = _html_jobs(
             scraper, fetcher, keyword, label, (json_path, raw_path, debug_path), fallback_reason
         )
@@ -321,6 +346,13 @@ def build_api_callbacks(
     return _search, detail_source.detail
 
 
+def _can_call_api(scraper: Scraper, api_cfg: ApiConfig, name: str) -> bool:
+    if not api_cfg.enabled or name not in API_SOURCES:
+        return False
+    # no locations means no calls: an api-only site would look like "0 jobs found"
+    return not scraper.api_only or bool(api_cfg.locations) or api_cfg.country_wide
+
+
 def _select_targets(config: AppConfig, requested: Iterable[str]) -> list[str]:
     requested_list = list(requested)
     if requested_list:
@@ -388,7 +420,7 @@ def run(
         api_search: Callable[[], list[Job]] | None = None
         api_detail: Callable[[Job], str | None] | None = None
         api_cfg = site_cfg.api
-        if api_cfg is not None and api_cfg.enabled and name in API_SOURCES:
+        if api_cfg is not None and _can_call_api(scraper, api_cfg, name):
             api_search, api_detail = build_api_callbacks(
                 API_SOURCES[name],
                 api_cfg,

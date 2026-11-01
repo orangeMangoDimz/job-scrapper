@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 class Scraper(ABC):
     name: str
     requires_search_html: bool = True
+    # True: the runner never fetches or parses HTML for this site
+    api_only: bool = False
 
     def __init__(self, url: str, limit: int) -> None:
         self.url = url

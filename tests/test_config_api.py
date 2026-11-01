@@ -55,7 +55,7 @@ def test_locations_must_be_list_of_strings(tmp_path: Path):
 
 
 def test_registry_has_api_sites():
-    assert set(API_SOURCES) == {"jobstreet", "glints", "linkedin"}
+    assert set(API_SOURCES) == {"jobstreet", "glints", "linkedin", "upwork"}
 
 
 def test_delay_seconds_parsed(tmp_path: Path):
@@ -76,3 +76,30 @@ def test_delay_seconds_defaults_to_none(tmp_path: Path):
 def test_delay_seconds_must_be_valid_range(tmp_path: Path, bad: str):
     with pytest.raises(ConfigError, match="sites.jobstreet.api.delay_seconds"):
         load(_write(tmp_path, f"    api:\n      delay_seconds: {bad}\n"))
+
+
+def test_upwork_site_bypasses_the_global_location_filter(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+keywords: [python]
+filter:
+  location: [jakarta]
+sites:
+  upwork:
+    limit: 30
+    filter: {}
+    url_template: "https://www.upwork.com/nx/search/jobs/?q={keyword}&sort=recency"
+    api:
+      locations: [Remote]
+"""
+    )
+
+    config = load(config_path)
+
+    assert config.filter_for("upwork") == {}
+    assert config.limit_for("upwork") == 30
+    site = config.site("upwork")
+    assert site is not None
+    assert site.api is not None
+    assert site.api.locations == ("Remote",)

@@ -7,9 +7,11 @@ from .glints import GlintsApi
 from .jobstreet import JobstreetApi
 from .linkedin import LinkedinApi
 from .source import ApiSource
+from .upwork import UpworkApi
 
 API_SOURCES: dict[str, Callable[[ApiClient], ApiSource]] = {
     "jobstreet": JobstreetApi,
     "glints": GlintsApi,
     "linkedin": LinkedinApi,
+    "upwork": UpworkApi,
 }
