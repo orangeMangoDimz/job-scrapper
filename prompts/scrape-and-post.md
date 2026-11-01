@@ -6,7 +6,7 @@ Execute all steps below now, in order. Do not ask for confirmation.
 
 Call the `job-scraper` MCP tool `scrape_jobs` with no arguments. It will run
 every enabled site for every configured keyword, applying the recency and
-content filters from the bound `config.yaml`, and return aggregated results.
+content filters from the job settings in Mongo, and return aggregated results.
 
 The response shape is:
 

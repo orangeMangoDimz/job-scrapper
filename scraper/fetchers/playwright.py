@@ -5,7 +5,7 @@ import contextlib
 import time
 
 from ..config import USER_AGENT
-from ..log import get_logger
+from ..log import get_logger, redact_proxy_url
 from .base import FetchAttempt, detect_challenge
 
 _LOG = get_logger()
@@ -39,7 +39,7 @@ class PlaywrightFetcher:
                 stealth_sync = None
 
         if self._proxy:
-            _LOG.info("[playwright] using proxy: %s", self._proxy)
+            _LOG.info("[playwright] using proxy: %s", redact_proxy_url(self._proxy))
 
         try:
             with sync_playwright() as p:

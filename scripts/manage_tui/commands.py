@@ -6,7 +6,7 @@ executes the very same `Command.argv`. They cannot drift because both derive
 from the objects returned here.
 
 A "sequence" is an ordered list of Commands run with stop-on-first-failure.
-Most actions are a single command; dev `start` is two (yq merge, then up).
+Each action is one command today.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ import shlex
 from dataclasses import dataclass
 
 from .model import CONTAINER_NAMES, Environment
+
+PROXY_ENV_VAR = "SCRAPER_PROXY_URL"
 
 ACTIONS = ("start", "stop", "status", "logs")
 ALL = "all"
@@ -72,10 +74,9 @@ _DISCORD_TEST_MESSAGE = "✅ manage.py TUI discord test — bot token + channel 
 class Command:
     """One process invocation.
 
-    stdout_path mirrors a shell `> file` redirect (needed for the yq merge,
-    whose output is captured to a file). The runner opens that file for the
-    child's stdout; the preview renders the ` > file` suffix so what the user
-    sees matches what runs.
+    stdout_path mirrors a shell `> file` redirect. The runner opens that file
+    for the child's stdout; the preview renders the ` > file` suffix so what
+    the user sees matches what runs.
     """
 
     argv: list[str]
@@ -95,11 +96,7 @@ def build_sequence(
     profiles = sorted(profile_map.keys())
 
     if action == "start":
-        sequence: list[Command] = []
-        merge = merge_command(env)
-        if merge is not None:
-            sequence.append(merge)
-        sequence.append(
+        return [
             Command(
                 base
                 + ["--progress", "plain"]
@@ -109,8 +106,7 @@ def build_sequence(
                 # multi-MB no-newline "lines"). --progress plain handles build.
                 + ["up", "--build", "--quiet-pull", "-d"]
             )
-        )
-        return sequence
+        ]
 
     if action == "stop":
         # Every service here is profile-gated, and Compose v2 `down` only
@@ -138,25 +134,9 @@ def build_sequence(
     raise ValueError(f"unknown action: {action!r}")
 
 
-def merge_command(env: Environment) -> Command | None:
-    """The yq merge, mirroring scripts/run_dev.sh. None when env has no merge."""
-    merge = env.config_merge
-    if merge is None:
-        return None
-    return Command(
-        argv=[
-            merge.tool,
-            "eval-all",
-            "select(fileIndex == 0) * select(fileIndex == 1)",
-            merge.base,
-            merge.patch,
-        ],
-        stdout_path=merge.output,
-    )
-
-
 def _base(env: Environment) -> list[str]:
-    cmd = ["docker", "compose"]
+    cmd = ["env", f"{PROXY_ENV_VAR}={env.proxy.check_url}"] if env.proxy else []
+    cmd += ["docker", "compose"]
     for compose_file in env.compose_files:
         cmd += ["-f", compose_file]
     return cmd

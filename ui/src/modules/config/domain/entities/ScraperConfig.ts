@@ -1,102 +1,109 @@
+export interface FilterSetting {
+  location: string[]
+  employmentType: string[]
+  workType: string[]
+}
+
+export interface ApiSetting {
+  isEnabled: boolean
+  locations: string[]
+  isCountryWide: boolean
+  delaySeconds: [number, number] | null
+}
+
 export interface SiteSetting {
   name: string
   isEnabled: boolean
   limit: number | null
+  maxAgeHours: number | null
+  filter: FilterSetting | null
+  fields: string[] | null
+  api: ApiSetting | null
 }
 
 export interface ConfigValues {
   keywords: string[]
   limit: number | null
   maxAgeHours: number | null
-  proxyUrl: string | null
+  filter: FilterSetting
+  defaultFields: string[]
   sites: SiteSetting[]
 }
 
 export interface ConfigSnapshot {
   values: ConfigValues
-  isReadOnly: boolean
-  locked: string[]
+  version: number
+  updatedAt: string
+  updatedBy: string
   isStale: boolean
 }
 
-export interface SiteChanges {
-  isEnabled?: boolean
-  limit?: number
+export interface ConfigVersion {
+  version: number
+  updatedAt: string
+  updatedBy: string
+  keywords: string[]
+  enabledSites: string[]
 }
+
+export type SiteChanges = Partial<Omit<SiteSetting, 'name'>>
 
 export interface ConfigChanges {
   keywords?: string[]
   limit?: number
   maxAgeHours?: number
-  proxyUrl?: string | null
+  filter?: FilterSetting
+  defaultFields?: string[]
   sites?: Record<string, SiteChanges>
 }
 
-export function isLocked(locked: string[], path: string): boolean {
-  return locked.includes(path)
-}
+export const EMPTY_FILTER: FilterSetting = { location: [], employmentType: [], workType: [] }
+
+const SITE_FIELDS = ['isEnabled', 'limit', 'maxAgeHours', 'filter', 'fields', 'api'] as const
 
 export function toOptionalNumber(value: string | number): number | null {
   return value === '' ? null : Number(value)
 }
 
-function isSameList(first: string[], second: string[]): boolean {
-  return first.length === second.length && first.every((item, index) => item === second[index])
-}
-
-function toSiteChanges(
-  site: SiteSetting,
-  original: SiteSetting | undefined,
-  locked: string[],
-): SiteChanges {
-  const isEnabledKept =
-    site.isEnabled === original?.isEnabled || isLocked(locked, `sites.${site.name}.enabled`)
-  const isLimitKept =
-    site.limit === null ||
-    site.limit === original?.limit ||
-    isLocked(locked, `sites.${site.name}.limit`)
-  return {
-    ...(isEnabledKept ? {} : { isEnabled: site.isEnabled }),
-    ...(isLimitKept ? {} : { limit: site.limit as number }),
+export function toDelaySeconds(min: number | null, max: number | null): [number, number] | null {
+  if (min === null && max === null) {
+    return null
   }
+  return [min ?? (max as number), max ?? (min as number)]
 }
 
-function toSitesChanges(
-  values: ConfigValues,
-  original: ConfigValues,
-  locked: string[],
-): Record<string, SiteChanges> {
+function isSame(first: unknown, second: unknown): boolean {
+  return JSON.stringify(first) === JSON.stringify(second)
+}
+
+function toSiteChanges(site: SiteSetting, original: SiteSetting | undefined): SiteChanges {
+  const changed = SITE_FIELDS.filter((field) => !isSame(site[field], original?.[field]))
+  return Object.fromEntries(changed.map((field) => [field, site[field]])) as SiteChanges
+}
+
+function toSitesChanges(values: ConfigValues, original: ConfigValues): Record<string, SiteChanges> {
   const entries = values.sites.map((site): [string, SiteChanges] => [
     site.name,
     toSiteChanges(
       site,
       original.sites.find((candidate) => candidate.name === site.name),
-      locked,
     ),
   ])
   return Object.fromEntries(entries.filter(([, changes]) => Object.keys(changes).length > 0))
 }
 
-export function toConfigChanges(
-  values: ConfigValues,
-  original: ConfigValues,
-  locked: string[],
-): ConfigChanges {
-  const sites = toSitesChanges(values, original, locked)
-  const isKeywordsKept =
-    isSameList(values.keywords, original.keywords) || isLocked(locked, 'keywords')
-  const isLimitKept =
-    values.limit === null || values.limit === original.limit || isLocked(locked, 'limit')
-  const isMaxAgeKept =
-    values.maxAgeHours === null ||
-    values.maxAgeHours === original.maxAgeHours ||
-    isLocked(locked, 'max_age_hours')
-  const isProxyKept = values.proxyUrl === original.proxyUrl || isLocked(locked, 'proxy')
+export function toConfigChanges(values: ConfigValues, original: ConfigValues): ConfigChanges {
+  const sites = toSitesChanges(values, original)
+  const isLimitKept = values.limit === null || values.limit === original.limit
+  const isMaxAgeKept = values.maxAgeHours === null || values.maxAgeHours === original.maxAgeHours
   return {
-    ...(isKeywordsKept ? {} : { keywords: values.keywords }),
+    ...(isSame(values.keywords, original.keywords) ? {} : { keywords: values.keywords }),
     ...(isLimitKept ? {} : { limit: values.limit as number }),
     ...(isMaxAgeKept ? {} : { maxAgeHours: values.maxAgeHours as number }),
-    ...(isProxyKept ? {} : { proxyUrl: values.proxyUrl }),
+    ...(isSame(values.filter, original.filter) ? {} : { filter: values.filter }),
+    ...(isSame(values.defaultFields, original.defaultFields)
+      ? {}
+      : { defaultFields: values.defaultFields }),
     ...(Object.keys(sites).length > 0 ? { sites } : {}),
   }
 }

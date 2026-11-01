@@ -166,9 +166,10 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME,MCP_BIND_HOST
+          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME,MCP_BIND_HOST,SCRAPER_PROXY_URL
           script: |
             set -euo pipefail
+            : "${SCRAPER_PROXY_URL:?Set the SCRAPER_PROXY_URL GitHub secret or variable}"
             # one-time migration: stop stack from pre-rename dir ~/job-scrapper (volume kept)
             if [ -d ~/job-scrapper ]; then
               if [ -f ~/job-scrapper/.env ] && [ ! -f ~/scraper/.env ]; then cp ~/job-scrapper/.env ~/scraper/.env; fi
@@ -193,6 +194,7 @@ jobs:
           MONGO_DB_NAME: ${{ vars.MONGO_DB_NAME || 'job_scraper' }}
           MONGO_COLLECTION_NAME: ${{ vars.MONGO_COLLECTION_NAME || 'scrape_runs' }}
           MCP_BIND_HOST: ${{ vars.MCP_BIND_HOST || '172.17.0.1' }}
+          SCRAPER_PROXY_URL: ${{ secrets.SCRAPER_PROXY_URL || vars.SCRAPER_PROXY_URL }}
 
   # 4. SSH into VPS → pull new bot image → restart container (runs after build-bot + deploy-mcp)
   deploy-bot:

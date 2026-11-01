@@ -18,7 +18,7 @@ from .fetchers import (
     FetchChain,
     PlaywrightFetcher,
 )
-from .log import get_logger
+from .log import get_logger, redact_proxy_url
 from .sites import SCRAPERS, Scraper
 from .sites._dates import parse_to_iso
 from .sites._filter import filter_reason, project_jobs
@@ -396,7 +396,7 @@ def run(
     pairs = _build_pairs(selected, keyword_list)
     proxy_url = config.proxy.url if config.proxy else None
     if proxy_url:
-        _LOG.info("[runner] using proxy: %s", proxy_url)
+        _LOG.info("[runner] using proxy: %s", redact_proxy_url(proxy_url))
     fetcher = default_fetch_chain(proxy=proxy_url)
 
     # Load the wilayah location index fresh from Mongo once, single-threaded, before

@@ -1,62 +1,80 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EMPTY_FILTER,
   hasConfigChanges,
   toConfigChanges,
+  toDelaySeconds,
   toOptionalNumber,
   type ConfigValues,
+  type SiteSetting,
 } from '@/modules/config/domain/entities/ScraperConfig'
+
+const SITE: SiteSetting = {
+  name: 'upwork',
+  isEnabled: true,
+  limit: 30,
+  maxAgeHours: null,
+  filter: EMPTY_FILTER,
+  fields: null,
+  api: { isEnabled: true, locations: ['Remote'], isCountryWide: false, delaySeconds: null },
+}
 
 const ORIGINAL: ConfigValues = {
   keywords: ['django'],
   limit: 3,
   maxAgeHours: 72,
-  proxyUrl: null,
-  sites: [{ name: 'upwork', isEnabled: true, limit: 30 }],
+  filter: { ...EMPTY_FILTER, location: ['jakarta'] },
+  defaultFields: ['title'],
+  sites: [SITE],
+}
+
+function withSite(changes: Partial<SiteSetting>): ConfigValues {
+  return { ...ORIGINAL, sites: [{ ...SITE, ...changes }] }
 }
 
 describe('toConfigChanges', () => {
   it('sends nothing when nothing changed', () => {
-    expect(hasConfigChanges(toConfigChanges(ORIGINAL, ORIGINAL, []))).toBe(false)
+    expect(hasConfigChanges(toConfigChanges(ORIGINAL, ORIGINAL))).toBe(false)
   })
 
   it('sends only the changed field', () => {
-    const changes = toConfigChanges({ ...ORIGINAL, limit: 9 }, ORIGINAL, [])
-
-    expect(changes).toEqual({ limit: 9 })
+    expect(toConfigChanges({ ...ORIGINAL, limit: 9 }, ORIGINAL)).toEqual({ limit: 9 })
   })
 
-  it('sends a cleared proxy', () => {
-    const original = { ...ORIGINAL, proxyUrl: 'socks5://localhost:1080' }
+  it('sends a changed filter whole', () => {
+    const filter = { ...EMPTY_FILTER, workType: ['remote'] }
 
-    expect(toConfigChanges(ORIGINAL, original, [])).toEqual({ proxyUrl: null })
+    expect(toConfigChanges({ ...ORIGINAL, filter }, ORIGINAL)).toEqual({ filter })
+  })
+
+  it('sends changed default fields', () => {
+    const changes = toConfigChanges({ ...ORIGINAL, defaultFields: ['title', 'url'] }, ORIGINAL)
+
+    expect(changes).toEqual({ defaultFields: ['title', 'url'] })
   })
 
   it('sends only the changed site field', () => {
-    const values = { ...ORIGINAL, sites: [{ name: 'upwork', isEnabled: false, limit: 30 }] }
-
-    expect(toConfigChanges(values, ORIGINAL, [])).toEqual({
+    expect(toConfigChanges(withSite({ isEnabled: false }), ORIGINAL)).toEqual({
       sites: { upwork: { isEnabled: false } },
     })
   })
 
-  it('leaves out locked fields', () => {
-    const values = {
-      ...ORIGINAL,
-      proxyUrl: 'socks5://localhost:9999',
-      sites: [{ name: 'upwork', isEnabled: true, limit: 50 }],
-    }
-
-    expect(toConfigChanges(values, ORIGINAL, ['proxy', 'sites.upwork.limit'])).toEqual({})
+  it('sends null when a site goes back to the global value', () => {
+    expect(toConfigChanges(withSite({ limit: null, filter: null }), ORIGINAL)).toEqual({
+      sites: { upwork: { limit: null, filter: null } },
+    })
   })
 
-  it('leaves out emptied limits', () => {
-    const values = {
-      ...ORIGINAL,
-      limit: null,
-      sites: [{ name: 'upwork', isEnabled: true, limit: null }],
-    }
+  it('sends a changed api block whole', () => {
+    const api = { ...SITE.api!, delaySeconds: [4, 6] as [number, number] }
 
-    expect(toConfigChanges(values, ORIGINAL, [])).toEqual({})
+    expect(toConfigChanges(withSite({ api }), ORIGINAL)).toEqual({
+      sites: { upwork: { api } },
+    })
+  })
+
+  it('leaves out emptied global numbers', () => {
+    expect(toConfigChanges({ ...ORIGINAL, limit: null, maxAgeHours: null }, ORIGINAL)).toEqual({})
   })
 })
 
@@ -67,5 +85,20 @@ describe('toOptionalNumber', () => {
 
   it('turns empty input into null', () => {
     expect(toOptionalNumber('')).toBeNull()
+  })
+})
+
+describe('toDelaySeconds', () => {
+  it('keeps both values', () => {
+    expect(toDelaySeconds(4, 6)).toEqual([4, 6])
+  })
+
+  it('turns two empty values into null', () => {
+    expect(toDelaySeconds(null, null)).toBeNull()
+  })
+
+  it('fills a missing value from the other one', () => {
+    expect(toDelaySeconds(4, null)).toEqual([4, 4])
+    expect(toDelaySeconds(null, 6)).toEqual([6, 6])
   })
 })

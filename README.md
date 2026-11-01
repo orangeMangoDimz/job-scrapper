@@ -8,7 +8,7 @@ each job to a Discord channel, and records the run in **MongoDB**.
 
 Four Dockerfile stages: `scraper-cli` (`python -m scraper`),
 `mcp-server` (`python -m mcp_server.server`), `bot`, plus `mongo` (MongoDB 7).
-Config-driven by `config.yaml` (keywords, sites, filters, bot schedule).
+Driven by job settings in Mongo (keywords, sites, filters), edited at /config. The bot schedule stays in config.yaml.
 
 Upwork is API-only. It uses the visitor GraphQL endpoint with no login and has no HTML fallback, so a failure shows up in `errors` with 0 jobs.
 
@@ -33,7 +33,7 @@ The root `requirements.txt` is baked into the Docker images and is not needed on
 The TUI is a single Textual screen with:
 
 - **Env bar** — `dev` / `prod` buttons (default `dev`, from `scripts/environments.yaml`)
-- **Summary panel** — shows merged keywords, enabled sites, proxy status, mongo db/collection, masked `.env` secrets
+- **Summary panel** — shows the site names from `seeds/job_settings.yaml`, proxy status, mongo db/collection, masked `.env` secrets
 - **Command preview panel** — shows the exact command that will run when you press a button
 - **Action rows** — one row per scope (`all`, `bot`, `mcp`, `mongo`); columns: Start / Stop (labelled **Down** on the `all` row) / Status / Logs
 - **Tests row** — dev smoke tests: Scrape / Mongo / Cron / Discord
@@ -111,8 +111,7 @@ Compose wiring that makes this work:
 
 | Example                         | Copy to                 | Purpose                                                          |
 | ------------------------------- | ----------------------- | ---------------------------------------------------------------- |
-| `.env.example`                  | `.env`                  | local compose env vars: Discord tokens, Mongo creds, `PROXY_URL` |
-| `config.dev.patch.yaml.example` | `config.dev.patch.yaml` | dev config overrides (merged over `config.yaml`)                 |
+| `.env.example`                  | `.env`                  | local compose env vars: Discord tokens, Mongo creds, `SCRAPER_PROXY_URL` |
 | `scripts/ssh-tunnel.sh.example` | `scripts/ssh-tunnel.sh` | reverse SOCKS proxy helper — gitignored, contains real host/user |
 | `claude/mcp.json.example`       | `.mcp.json`             | MCP client config for Claude (update URL for host vs Docker)     |
 
@@ -137,7 +136,9 @@ Run after MongoDB is up:
 MONGO_HOST=127.0.0.1 MONGO_PORT=27018 ./seed.sh   # prod via SSH tunnel
 ```
 
-Seeds are idempotent — drop + recreate each run.
+`./seed.sh job-settings` runs only the job settings seed, and `./seed.sh wilayah` runs only the area codes.
+
+The wilayah seed drops and recreates its collection on each run. The job settings seed only inserts when the document is missing, so it never overwrites your edits. It needs `.venv`, or a Python path in `SCRAPER_PYTHON`.
 
 **`wilayah`** — 91 599 Indonesian administrative region codes (Kepmendagri No 300.2.2-2138
 Tahun 2025). Source: [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah/tree/6ff9b8a2764cd4fbeb8c15fe0cba2d5a4eb26107)
@@ -151,7 +152,7 @@ the remote scraper routes its outbound HTTP traffic through **this machine's**
 residential IP, dodging datacenter-IP blocks that jobstreet/glints/linkedin apply
 to cloud VPS addresses.
 
-`config.yaml` has `proxy: socks5://localhost:1080`. In prod, `scraper-mcp` runs
+`SCRAPER_PROXY_URL` is `socks5://localhost:1080` in prod. In prod, `scraper-mcp` runs
 `network_mode: host`, so `localhost:1080` on the remote server is the tunnel
 endpoint provided by this script.
 
@@ -249,44 +250,23 @@ docker rm -f job-scraper-mongo && docker volume rm job-scrapper_mongo-data
 1. `deploy-mcp` (needs `build-mcp`): copies `docker-compose.yml` + `docker-compose.prod.yml` to the server via SCP, then SSHs in and runs `docker compose --profile mcp pull && up -d --no-build`, pinned to the immutable sha tag
 2. `deploy-bot` (needs `build-bot` + `deploy-mcp`): same flow for `--profile bot`, injects Discord tokens, Claude config paths, and `TZ`
 
-# Config: config.yaml + the dev patch
+# Config: Mongo, config.yaml, and the proxy var
 
-`config.yaml` is the single source of truth, committed to the repo and baked
-into Docker images at build time. Key fields:
+Settings live in three places, by how they change
 
-| Field                   | Purpose                                                   |
-| ----------------------- | --------------------------------------------------------- |
-| `keywords`              | Job titles to search                                      |
-| `limit` / `concurrency` | Global result cap and parallel fetches                    |
-| `proxy`                 | SOCKS5/HTTP proxy URL; absent or `~` = direct connection  |
-| `max_age_hours`         | Drop jobs older than this                                 |
-| `filter.location`       | Keep only jobs matching these locations                   |
-| `bot.schedule`          | Cron expression for the Discord bot (e.g. `"0 11 * * *"`) |
-| `bot.message_template`  | Discord message format with `{field}` placeholders        |
-| `bot.max_chars`         | Truncate messages to this length                          |
-| `sites.*`               | Per-site `enabled`, `limit`, `url_template`, `fields`     |
+| Place | Holds | Change it |
+| --- | --- | --- |
+| `job_settings` collection | `keywords`, `limit`, `max_age_hours`, `filter`, `default_fields`, `sites` | `/config` page, applies from the next run |
+| `SCRAPER_PROXY_URL` env var | Proxy URL. Empty means direct connection. Not set stops scrapes | `.env` in dev, GitHub variable in prod |
+| `config.yaml` | `concurrency`, `output_dir`, `bot.*` | Edit and rebuild the images |
 
-**Do you need a dev version?** Yes (recommended). Create `config.dev.patch.yaml`
-(copy from `config.dev.patch.yaml.example`) to override only what you need for
-local testing — reduced limits, fewer sites, no proxy. No need to fork the whole
-file.
+Each host's Mongo has its own document, so dev and prod differ without a patch file. A new environment needs one seed
 
-**How the override works:** on a dev **Start**, the TUI runs:
+    ./seed.sh job-settings
 
-```bash
-yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' \
-  config.yaml config.dev.patch.yaml > /tmp/config.dev.yaml
-```
+`seeds/job_settings.yaml` is only the first version. After seeding, `/config` is the source. `url_template` can change only through the `update_config` MCP tool
 
-The `yq` `*` operator deep-merges maps (nested dicts) and replaces scalars/lists
-with the patch value. An explicit `null` (`~`) in the patch **overrides** the
-base — so `proxy: ~` disables the proxy in dev (the scraper only activates a
-proxy when the value is a non-empty string). The dev compose overlay then
-bind-mounts `/tmp/config.dev.yaml` into the `scraper-mcp` container
-(`docker-compose.dev.yml`).
-
-In **prod**, `config_merge` is `null` in `scripts/environments.yaml`, so no
-merge runs — the image-baked `config.yaml` is used directly.
+The last 20 versions stay in `job_settings_history`, and `/config` can restore any of them
 
 > **Note on `bot.schedule`:** the crontab is generated from `config.yaml` at
 > **image build time** (Dockerfile `bot` stage). Changing `bot.schedule` requires
@@ -295,7 +275,7 @@ merge runs — the image-baked `config.yaml` is used directly.
 
 # How the filter works
 
-`filter:` in `config.yaml` runs **after** scraping — not at the HTTP/URL level.
+The `filter` job setting runs **after** scraping — not at the HTTP/URL level.
 URL templates carry no location params. All search-page results are fetched and
 parsed first, then filtered in Python.
 
@@ -444,7 +424,8 @@ docker exec -it job-scraper-bot sh -c "cd /workspace/scraper-bot && claude"
 
 Then run `/mcp` to list available servers and tools. The MCP server exposes:
 `scrape_jobs`, `insert_scrape_run`, `get_latest_scrape_run`, `get_scrape_status`,
-`list_sites`, `get_config`, `update_config`, `get_scrape_response_structure`,
+`list_sites`, `get_config`, `update_config`, `get_config_history`, `restore_config`,
+`get_scrape_response_structure`,
 `test_proxy_connection` — plus the `/health` HTTP endpoint.
 
 **Quick smoke tests** (TUI tests row, no full cron run needed):
@@ -472,9 +453,8 @@ http://localhost:5174:
 
 - Runs go through `scraper-mcp`, one at a time, with no stop button
 - Each run is saved to `output/ui-runs/<run_id>/`, last 50 kept, and never to Mongo
-- Dev config edits write `config.yaml` and refresh `/tmp/config.dev.yaml`. Backups go
-  to `config-backups/`. Fields set in `config.dev.patch.yaml` are locked
-- Prod is public through Caddy with one password. Config is read-only there
+- Config saves go through `scraper-mcp` into Mongo. Saving is off while a scrape runs, because MCP is busy then
+- Prod is public through Caddy with one password
 - Compose needs the external `job-net` network. The scripts in `scripts/` create it.
   With plain `docker compose` or `scripts/manage.py`, run `docker network create job-net`
   once first
@@ -485,7 +465,7 @@ This markdown file is what cron feeds to Claude on every run. It drives the full
 scrape-and-post pipeline:
 
 1. **Scrape** — call MCP `scrape_jobs` with no arguments; runs every enabled site
-   for every configured keyword using `config.yaml` filters and returns aggregated
+   for every configured keyword using the job settings filters and returns aggregated
    results grouped by keyword → site → jobs
 2. **Read formatting config** — extract `bot.message_template` and `bot.max_chars`
    from `/workspace/config.yaml` using `yq`

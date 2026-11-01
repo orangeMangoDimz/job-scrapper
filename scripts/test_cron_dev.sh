@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-shot dev test of the scrape → Discord post flow using the dev config overlay.
-# Merges config.yaml + config.dev.patch.yaml, starts mongo + scraper-mcp via the
-# dev compose stack, then fires cron/run-scraper.sh directly inside a fresh bot
+# One-shot dev test of the scrape → Discord post flow. Needs seeded job settings.
+# Starts mongo + scraper-mcp through the dev compose files, then fires
+# cron/run-scraper.sh directly inside a fresh bot
 # container. Tears down the MCP stack on exit.
 #
 # Requires:
@@ -11,7 +11,6 @@ set -euo pipefail
 #                         MONGO_ROOT_PASSWORD (sourced automatically by this script)
 #   ~/.claude           - your local Claude Code session config dir
 #   ~/.claude.json      - your local Claude Code config file
-#   yq                  - https://github.com/mikefarah/yq
 #
 # Usage:
 #   ./scripts/test_cron_dev.sh
@@ -21,14 +20,8 @@ cd "$REPO_ROOT"
 
 COMPOSE_BASE="docker-compose.yml"
 COMPOSE_ENV="docker-compose.dev.yml"
-MERGED_CONFIG="/tmp/config.dev.yaml"
 
 # --- guards ---
-if ! command -v yq &>/dev/null; then
-  echo "ERROR: yq not found — install it first: https://github.com/mikefarah/yq" >&2
-  exit 1
-fi
-
 if [ ! -f "$REPO_ROOT/.env" ]; then
   echo "ERROR: .env not found — copy .env.example and set MONGO_ROOT_PASSWORD" >&2
   exit 1
@@ -76,13 +69,6 @@ elif [ "$MCP_RUNNING" = true ] || [ "$MONGO_RUNNING" = true ]; then
   echo "  docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile mcp down" >&2
   exit 1
 fi
-
-# --- merge dev config ---
-echo "==> Merging config.yaml + config.dev.patch.yaml -> ${MERGED_CONFIG}..."
-yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' \
-  "$REPO_ROOT/config.yaml" \
-  "$REPO_ROOT/config.dev.patch.yaml" \
-  > "$MERGED_CONFIG"
 
 # --- start dev MCP stack (mongo + scraper-mcp) if not already up ---
 if [ "$STACK_WAS_RUNNING" = false ]; then

@@ -90,7 +90,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UI_HOST=0.0.0.0
 
 RUN useradd --uid 1001 --create-home uiuser \
- && mkdir -p /app/output /app/logs /app/config-backups \
+ && mkdir -p /app/output /app/logs \
  && chown -R uiuser:uiuser /app
 
 WORKDIR /app
@@ -98,7 +98,6 @@ WORKDIR /app
 COPY ui_server/requirements.txt ./ui-requirements.txt
 RUN pip install --no-cache-dir -r ui-requirements.txt
 
-COPY --chown=uiuser:uiuser scraper/__init__.py scraper/config_loader.py scraper/types.py ./scraper/
 COPY --chown=uiuser:uiuser ui_server ./ui_server
 COPY --chown=uiuser:uiuser --from=ui-build /ui/dist ./ui/dist
 

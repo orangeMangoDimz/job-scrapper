@@ -144,5 +144,5 @@ The four current sites cover Indonesia-focused job boards. To add another
 
 1. Add `scraper/sites/<name>.py` with a `Scraper` subclass implementing `parse(html)`.
 2. Register the class in `scraper/sites/__init__.py::SCRAPERS`.
-3. Add an entry under `sites:` in `config.yaml` with a `url_template`.
+3. Add an entry under `sites:` in `seeds/job_settings.yaml` with a `url_template`, then add the same entry to each environment with the `update_config` MCP tool. A site's `url_template` cannot be set from `/config`.
 4. The runner picks it up automatically — no other changes needed.

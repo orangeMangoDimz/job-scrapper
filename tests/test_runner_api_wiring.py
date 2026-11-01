@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from scraper import runner
 from scraper.api.client import DEFAULT_DELAY_SECONDS, DETAIL_DELAY_SECONDS
-from scraper.config_loader import ApiConfig, load
+from scraper.config_loader import ApiConfig, parse
 from scraper.runner import build_api_callbacks
 from scraper.types import Job, empty_job
 
@@ -67,8 +68,7 @@ def test_search_falls_back_to_default_delay():
 
 
 def test_run_wires_api_callbacks_into_run_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(
+    raw_config = yaml.safe_load(
         f"""
 keywords: [devops]
 output_dir: {tmp_path / "out"}
@@ -103,6 +103,6 @@ sites:
     monkeypatch.setattr(runner, "build_api_callbacks", fake_build)
     monkeypatch.setattr(runner, "run_one", fake_run_one)
 
-    assert runner.run(load(config_path)) == 0
+    assert runner.run(parse(raw_config, None)) == 0
     assert built == [("devops", ("Jakarta Raya",), (4.0, 6.0))]
     assert received == [{"api_search": search, "api_detail": detail}]

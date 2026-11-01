@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Start the prod environment (proxy enabled, uses config.yaml).
+# Start the prod environment with the proxy on.
 # Requires a SOCKS5 proxy running on host port 1080.
 #
 # Usage:
@@ -17,6 +17,7 @@ COMPOSE_ENV="docker-compose.prod.yml"
 PROXY_HOST="localhost"
 PROXY_PORT="1080"
 ARG="${1:-all}"
+export SCRAPER_PROXY_URL="socks5://${PROXY_HOST}:${PROXY_PORT}"
 
 # --- guards ---
 if ! curl -sf --socks5 "${PROXY_HOST}:${PROXY_PORT}" --max-time 3 https://ifconfig.me -o /dev/null; then

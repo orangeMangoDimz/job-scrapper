@@ -60,6 +60,7 @@ anyone with read access). Use these for non-secret config:
 | `CLAUDE_CONFIG_FILE` | deploy-bot | `/home/ubuntu/.claude.json` (host file mounted into bot) |
 | `UI_DOMAIN` | deploy-ui | Public domain for the UI, with DNS pointing to the VPS |
 | `MCP_BIND_HOST` | all deploy jobs | Optional. Docker gateway IP of the VPS, default `172.17.0.1` |
+| `SCRAPER_PROXY_URL` | `deploy-mcp` | Required. Proxy URL for scrapes, such as `socks5://localhost:1080`. A URL with a password belongs in a secret of the same name, because variables are visible in logs. The deploy fails when it is missing or empty |
 
 ## Claude Code authentication
 
@@ -127,11 +128,12 @@ with a token that has `read:packages` scope.
 
 ## Changing config
 
-Because everything is baked in:
+Job settings live in Mongo. The rest is baked in:
 
 | Want to… | How |
 |---|---|
-| Change `keyword`, `limit`, `filter` | Edit `config.yaml` → push to `main` |
+| Change keywords, limits, filters, sites | Edit at `/config`. Applies from the next run, no deploy |
+| Change the proxy | Update the `SCRAPER_PROXY_URL` GitHub secret or variable → redeploy |
 | Change cron schedule | Edit `bot.schedule` in `config.yaml` → push to `main` (bot Dockerfile reads it via `yq` at build time) |
 | Change Discord message format | Edit `bot.message_template` in `config.yaml` → push to `main` (read fresh each run, no rebuild needed) |
 | Change Discord per-message cap | Edit `bot.max_chars` in `config.yaml` → push to `main` |
@@ -140,9 +142,8 @@ Because everything is baked in:
 | Rotate Discord bot token | Update `DISCORD_BOT_TOKEN` secret → push to main |
 | Rotate Claude session | Re-run `claude login` on the VPS as `ubuntu` user — bot picks it up on next start |
 
-Note: `update_config` MCP tool writes are still **ephemeral** — useful
-for one-shot experiments via Claude session, but lost on next deploy.
-For permanent changes, edit the repo file.
+Note: `update_config` MCP tool writes go to Mongo and survive deploys. The
+last 20 versions stay in history, see "Version history" in `runbook.md`.
 
 ## Manual rollback
 
@@ -263,6 +264,16 @@ node seeds/wilayah.runner.js
 The script drops the existing `wilayah` collection, inserts all batches,
 creates a `nama` index, and verifies the exact row count. It exits
 non-zero on mismatch.
+
+### Seed job settings
+
+Run this once on a fresh MongoDB, and before the first deploy that reads job settings. It only inserts when the document is missing.
+
+```bash
+MONGO_HOST=127.0.0.1 MONGO_PORT=<LOCAL_PORT> MONGO_ROOT_PASSWORD=<MONGO_ROOT_PASSWORD> ./seed.sh job-settings
+```
+
+Without this document, scrapes stop with a message that names this command.
 
 ## Bot's first run on a new schedule
 

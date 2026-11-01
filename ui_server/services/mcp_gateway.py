@@ -10,12 +10,14 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from ui_server.errors import McpUnavailableError
+from ui_server.errors import ConfigConflictError, ConfigInvalidError, McpUnavailableError
 
 LOG = logging.getLogger("scraper-ui")
 READ_TIMEOUT_SECONDS = 5.0
+WRITE_TIMEOUT_SECONDS = 10.0
 SCRAPE_TIMEOUT_SECONDS = 1800.0
 CONNECT_TIMEOUT_SECONDS = 5.0
+SAVE_SOURCE = "ui"
 
 
 class McpGateway(Protocol):
@@ -38,6 +40,18 @@ def read_structured(tool: str, result: Any) -> dict[str, Any]:
     if "error" in content:
         raise McpUnavailableError(str(content["error"]))
     return content
+
+
+def _raise_on_failed_save(result: dict[str, Any]) -> None:
+    if result.get("ok"):
+        return
+    reason = result.get("reason")
+    message = result.get("message")
+    if reason == "conflict":
+        raise ConfigConflictError(message)
+    if reason == "invalid":
+        raise ConfigInvalidError(message)
+    raise McpUnavailableError(message)
 
 
 class HttpMcpGateway:
@@ -86,6 +100,24 @@ class ScraperClient:
 
     async def read_config(self) -> CachedRead:
         return await self._read("get_config")
+
+    async def read_config_history(self) -> list[dict[str, Any]]:
+        result = await self._gateway.call("get_config_history", {}, READ_TIMEOUT_SECONDS)
+        return result["entries"]
+
+    async def save_config(self, patch: dict[str, Any], expected_version: int) -> None:
+        arguments = {"patch": patch, "expected_version": expected_version, "source": SAVE_SOURCE}
+        result = await self._gateway.call("update_config", arguments, WRITE_TIMEOUT_SECONDS)
+        _raise_on_failed_save(result)
+
+    async def restore_config(self, version: int, expected_version: int) -> None:
+        arguments = {
+            "version": version,
+            "expected_version": expected_version,
+            "source": SAVE_SOURCE,
+        }
+        result = await self._gateway.call("restore_config", arguments, WRITE_TIMEOUT_SECONDS)
+        _raise_on_failed_save(result)
 
     async def _read(self, tool: str) -> CachedRead:
         try:

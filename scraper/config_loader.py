@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote, urlparse
 
 import yaml
@@ -26,6 +28,12 @@ ALLOWED_URL_HOSTS: frozenset[str] = frozenset(
         "www.indeed.com",
         "www.upwork.com",
     }
+)
+
+PROXY_ENV_VAR = "SCRAPER_PROXY_URL"
+
+JOB_SETTINGS_KEYS: frozenset[str] = frozenset(
+    {"keywords", "limit", "max_age_hours", "filter", "default_fields", "sites"}
 )
 
 
@@ -296,14 +304,34 @@ def _parse_delay(raw: object, source: str) -> tuple[float, float] | None:
     return (low, high)
 
 
-def load(path: Path) -> AppConfig:
+def read_machine_settings(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
 
     raw = yaml.safe_load(path.read_text()) or {}
     if not isinstance(raw, dict):
         raise ConfigError(f"config root must be a mapping, got {type(raw).__name__}")
+    return raw
 
+
+def resolve_proxy_url() -> str | None:
+    value = os.environ.get(PROXY_ENV_VAR)
+    if value is None:
+        raise ConfigError(
+            f"{PROXY_ENV_VAR} is not set. "
+            "Set it to a proxy URL, or to empty for a direct connection"
+        )
+    return value.strip() or None
+
+
+def validate_job_settings(settings: dict[str, Any]) -> None:
+    unknown = sorted(set(settings) - JOB_SETTINGS_KEYS)
+    if unknown:
+        raise ConfigError(f"not a job setting: {', '.join(unknown)}")
+    parse(settings, None)
+
+
+def parse(raw: dict[str, Any], proxy_url: str | None) -> AppConfig:
     keywords = _resolve_keywords(raw)
 
     sites_raw = raw.get("sites")
@@ -386,8 +414,7 @@ def load(path: Path) -> AppConfig:
     global_filter = _validate_filter(raw.get("filter"), "filter")
 
     proxy: ProxyConfig | None = None
-    proxy_url = raw.get("proxy")
-    if isinstance(proxy_url, str) and proxy_url.strip():
+    if proxy_url and proxy_url.strip():
         proxy = ProxyConfig(url=proxy_url.strip())
 
     return AppConfig(

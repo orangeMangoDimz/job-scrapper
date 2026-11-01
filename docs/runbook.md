@@ -7,8 +7,8 @@ The general loop is always:
 
 1. `get_config` → see current shape
 2. Compose a minimal patch
-3. `update_config` with that patch
-4. On `ok=false`, surface the error verbatim
+3. `update_config` with that patch and the version from `get_config`
+4. On `ok=false`, surface the `message` verbatim
 
 For schema details see [`configuration.md`](configuration.md).
 For the tool catalog see [`mcp.md`](mcp.md).
@@ -122,15 +122,8 @@ Higher `limit` increases scrape time and block risk. Tighten
 
 User: "scrape faster" or "running too hot, slow it down"
 
-Faster (more parallelism, more RAM):
-```json
-{"patch": {"concurrency": 4}}
-```
-
-Slower (sequential):
-```json
-{"patch": {"concurrency": 1}}
-```
+`concurrency` is not a job setting, so `update_config` refuses it. Change
+`concurrency` in `config.yaml` and rebuild the images.
 
 Each Playwright fallback consumes ~250-300MB RAM. On a 2GB host, stay at
 2; on a bigger host, 4 is safe.
@@ -161,9 +154,14 @@ permissive)
 {"patch": {"sites": {"glints": {"filter": {"employment_type": "internship"}}}}}
 ```
 
-Per-site `filter:` blocks REPLACE the global block (no deep merge across
+Per-site `filter` blocks REPLACE the global block (no merge across
 the boundary). Once a per-site filter is set, the global filter doesn't
-apply to that site at all.
+apply to that site at all. A site with `filter: {}` has no filter. To go back
+to the global filter, send `null`:
+
+```json
+{"patch": {"sites": {"glints": {"filter": null}}}}
+```
 
 ## "Add new fields to the output"
 
@@ -192,7 +190,7 @@ Skip `update_config` entirely; use `scrape_jobs` with explicit args:
 {"keywords": ["fullstack engineer"], "sites": ["linkedin", "jobstreet"]}
 ```
 
-The on-disk config is unchanged; only the run is overridden. Add `"save_run": false`
+The saved job settings are unchanged; only the run is overridden. Add `"save_run": false`
 to keep the run out of MongoDB as well.
 
 ## "Show me the current settings"
@@ -210,31 +208,23 @@ For a higher-level view (resolved sample URLs, enabled list):
 
 ## When validation fails
 
-`update_config` returns `{ok: false, error: "<reason>"}`. Common errors:
+`update_config` returns `{ok: false, reason: "<kind>", message: "<text>"}`. `reason` is `invalid`, `conflict`, or `unavailable`. Common `message` values for `invalid`:
 
 | Error fragment                                    | Cause                                              |
 |---------------------------------------------------|----------------------------------------------------|
 | `'limit' must be >= 1`                            | Sent `0` or negative integer                       |
-| `'concurrency' must be >= 1`                      | Same                                               |
+| `not a job setting: concurrency`                  | Sent `concurrency` or `proxy`, which are not job settings |
 | `'max_age_hours' must be a positive integer`      | Sent `0`, negative, or non-integer                 |
 | `'keywords' must be a non-empty list of strings`  | Empty list or non-string entries                   |
 | `url_template uses unknown placeholder ...`       | URL has `{x}` not in `keyword/keyword_slug/keyword_plus` |
 | `filter.<key>.<subkey> must be a string or list` | Sent a number, dict, or other non-string value     |
 
-When you see these, don't loop blindly. Surface the verbatim error to the
+When you see these, don't loop blindly. Surface the verbatim `message` to the
 user and ask how to proceed (or whether to drop the offending key).
 
-## Backup discipline
+## Version history
 
-Every successful `update_config` writes `config.yaml.bak.<unix-ts>` next
-to the live file. Backups accumulate over time but are gitignored. To
-roll back manually inside the container:
-
-```bash
-mv config.yaml.bak.1778323689 config.yaml
-```
-
-The MCP server doesn't expose a rollback tool — file-level operations are
-intentionally out of scope. If a user asks for one, recommend they use
-`update_config` with the previous state (`get_config`'s `applied` field
-from the last good call, if cached) or shell into the container.
+Every save keeps the old version in `job_settings_history`, last 20 kept. To
+roll back, use **Restore** on `/config`, or call `restore_config` with the
+version from `get_config_history`. A restore creates a new version, so it can
+be undone the same way.

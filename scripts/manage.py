@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Interactive Docker manager TUI for the job-scrapper stack.
+"""Interactive Docker manager TUI for the scraper stack.
 
     python scripts/manage.py
 
 Lets you start / stop / status / logs the docker compose stack per profile
 (mcp, mongo, bot) across environments (dev, prod), previewing the exact
 command before it runs. Read-only over config: it loads .env, the compose
-files, config.yaml and config.dev.patch.yaml for display, never writing back.
+files, and the seed file for display, never writing back.
 
 Requires the TUI deps (not the repo's runtime deps):
 

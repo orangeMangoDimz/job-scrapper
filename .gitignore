@@ -54,7 +54,6 @@ Thumbs.db
 # Project-specific scraper artifacts
 output/*
 !output/.gitkeep
-config-backups/
 
 # Logs
 logs/*
@@ -62,7 +61,6 @@ logs/*
 *.debug.html
 run.log
 *.log
-config.yaml.bak.*
 
 # Playwright
 playwright-report/
@@ -95,5 +93,3 @@ scripts/rev-socks.sh
 # Local SSH tunnel script (hardcodes server host/user) — copy from the .example
 scripts/ssh-tunnel.sh
 
-# Local dev config patch (personal overrides) — copy from the .example
-config.dev.patch.yaml

@@ -1,14 +1,22 @@
 # Configuration reference
 
-The runtime is driven entirely by `config.yaml` at the repo root. The loader
-(`scraper/config_loader.py::load`) parses, validates, and resolves the file
-into an `AppConfig` dataclass. Any malformed value raises `ConfigError` and
-the run aborts — partial writes never reach disk.
+Job settings live in the `job_settings` Mongo collection, one document per
+environment. Edit them at `/config`, or with the `update_config` MCP tool.
+`config.yaml` holds `concurrency`, `output_dir`, and `bot`. The proxy lives in
+the `SCRAPER_PROXY_URL` env var.
+
+`scraper/config_loader.py::parse` validates all of them into an `AppConfig`
+dataclass. A malformed value raises `ConfigError`. A save with a malformed value
+changes nothing, and a run with one aborts.
 
 This page documents every key the loader recognizes. For filter semantics
 specifically, see [`filters.md`](filters.md).
 
 ## Top-level keys
+
+The examples below show the keys as YAML, which is the format of
+`seeds/job_settings.yaml`. `concurrency` and `output_dir` go in `config.yaml`,
+and the rest are job settings.
 
 ```yaml
 keywords: [software engineer, data analyst]   # required
@@ -236,7 +244,7 @@ sites:
 
 ## Validation rules summary
 
-The loader (`load(path)`) enforces:
+The loader (`parse`) enforces:
 
 | Key                       | Rule                                             | On failure        |
 |---------------------------|--------------------------------------------------|-------------------|
@@ -255,9 +263,11 @@ The loader (`load(path)`) enforces:
 
 Route HTTP requests through a proxy server. Useful for bypassing datacenter IP blocks by using residential IPs.
 
-```yaml
-proxy: "socks5://localhost:1080"
+```bash
+SCRAPER_PROXY_URL="socks5://localhost:1080"
 ```
+
+The var must be set. When it is not, `scrape_jobs` returns `ok: false` and says so. Set it to empty for a direct connection. This stops a missing prod var from turning the proxy off without anyone noticing.
 
 ### Supported proxy formats
 
@@ -281,9 +291,9 @@ curl --socks5 localhost:1080 http://httpbin.org/ip
 # Should show your home IP, not VPS IP
 ```
 
-Then in `config.yaml`:
-```yaml
-proxy: "socks5://localhost:1080"
+Then set the env var:
+```bash
+SCRAPER_PROXY_URL="socks5://localhost:1080"
 ```
 
 ### Docker considerations
@@ -293,28 +303,13 @@ When using `--network host` mode (required for localhost proxy):
 - `localhost:1080` inside container = `localhost:1080` on VPS host
 - No port mapping needed
 
-### Environment variable override
-
-Set `PROXY_URL` environment variable to override config file:
-
-```bash
-PROXY_URL="socks5://localhost:1080" python -m scraper
-```
-
-### Disable proxy
-
-Comment out or remove the `proxy` key:
-```yaml
-# proxy: "socks5://localhost:1080"
-```
-
 ## Loading the resolved config
 
 ```python
 from pathlib import Path
-from scraper.config_loader import load
+from scraper.job_settings import load_app_config, open_store
 
-config = load(Path("config.yaml"))
+config = load_app_config(Path("config.yaml"), open_store())
 
 config.keywords           # tuple[str, ...]
 config.limit              # int
@@ -332,9 +327,9 @@ config.filter_for("glints")    # dict[str, list[str]]
 
 ## Live editing via MCP
 
-The MCP server exposes `update_config` for safe runtime patching. See
-[`mcp.md`](mcp.md) for the tool catalog and patch shape.
+The `/config` page is the normal way to change job settings. The MCP server
+also exposes `update_config`. See [`mcp.md`](mcp.md) for the tool catalog and
+patch shape.
 
-The patch path is preferred over direct file edits because the merged
-result is validated through this same loader before being written to disk;
-invalid patches return an error and leave the live file untouched.
+Every save is validated through this same loader first. An invalid patch
+returns an error and changes nothing.

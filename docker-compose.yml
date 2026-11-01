@@ -35,7 +35,8 @@ services:
   #     - ./config.yaml:/app/config.yaml:ro
   #     - ./output:/app/output
   #   environment:
-  #     - PROXY_URL=${PROXY_URL:-}
+  #     - SCRAPER_PROXY_URL
+  #     - MONGO_URI=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD}@mongo:27017
 
   # SERVICE: mongo — persistent MongoDB store for scrape run history
   mongo:
@@ -91,6 +92,7 @@ services:
       - MONGO_URI=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD}@mongo:27017
       - MONGO_DB_NAME=${MONGO_DB_NAME:-job_scraper}
       - MONGO_COLLECTION_NAME=${MONGO_COLLECTION_NAME:-scrape_runs}
+      - SCRAPER_PROXY_URL # no default on purpose: unset stops scrapes, empty means direct connection
     networks:
       - default
       - job-net # lets the job-agent backend reach MCP as http://job-scraper-mcp:8080/mcp

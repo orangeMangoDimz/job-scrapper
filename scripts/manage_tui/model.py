@@ -33,14 +33,6 @@ class ManifestError(Exception):
 
 
 @dataclass(frozen=True)
-class ConfigMerge:
-    tool: str
-    base: str
-    patch: str
-    output: str
-
-
-@dataclass(frozen=True)
 class ProxyCheck:
     check_url: str
 
@@ -50,7 +42,6 @@ class Environment:
     name: str
     description: str
     compose_files: tuple[str, ...]
-    config_merge: ConfigMerge | None
     proxy: ProxyCheck | None
 
 
@@ -92,25 +83,8 @@ def _parse_environment(path: Path, name: str, body: object) -> Environment:
         name=name,
         description=str(body.get("description", "")),
         compose_files=tuple(str(f) for f in compose_files),
-        config_merge=_parse_merge(path, name, body.get("config_merge")),
         proxy=_parse_proxy(path, name, body.get("proxy")),
     )
-
-
-def _parse_merge(path: Path, name: str, raw: object) -> ConfigMerge | None:
-    if not raw:
-        return None
-    if not isinstance(raw, dict):
-        raise ManifestError(f"{path}: environment '{name}' config_merge must be a mapping")
-    try:
-        return ConfigMerge(
-            tool=str(raw["tool"]),
-            base=str(raw["base"]),
-            patch=str(raw["patch"]),
-            output=str(raw["output"]),
-        )
-    except KeyError as exc:
-        raise ManifestError(f"{path}: environment '{name}' config_merge missing key {exc}") from exc
 
 
 def _parse_proxy(path: Path, name: str, raw: object) -> ProxyCheck | None:

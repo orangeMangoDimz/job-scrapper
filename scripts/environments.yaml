@@ -7,9 +7,6 @@
 # Per-environment keys:
 #   description    free text shown in the summary panel
 #   compose_files  ordered list passed as `-f <file>` (later files override earlier)
-#   config_merge   optional. When set, `start` first runs the merge (mirrors run_dev.sh)
-#                  to produce the file the dev compose overlay bind-mounts into scraper-mcp.
-#                  Shape: { tool, base, patch, output }
 #   proxy          optional. When set, `start` warns (does not block) if the proxy is
 #                  unreachable. Shape: { check_url }
 
@@ -17,18 +14,12 @@ default_environment: dev
 
 environments:
   dev:
-    description: "Local dev — direct connection, dev config patch"
+    description: "Local dev — direct connection"
     compose_files: [docker-compose.yml, docker-compose.dev.yml]
-    config_merge:
-      tool: yq
-      base: config.yaml
-      patch: config.dev.patch.yaml
-      output: /tmp/config.dev.yaml
     proxy: null
 
   prod:
-    description: "Production — SOCKS5 proxy, raw config.yaml"
+    description: "Production — SOCKS5 proxy"
     compose_files: [docker-compose.yml, docker-compose.prod.yml]
-    config_merge: null
     proxy:
       check_url: "socks5://localhost:1080"

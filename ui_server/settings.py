@@ -19,10 +19,6 @@ class Settings(BaseSettings):
     mcp_url: str = "http://scraper-mcp:8080/mcp"
     runs_dir: Path = Path("output/ui-runs")
     log_path: Path = Path("logs/scraper.log")
-    config_path: Path = Path("config.yaml")
-    dev_patch_path: Path = Path("config.dev.patch.yaml")
-    dev_merged_path: Path = Path("config.dev.yaml")
-    backup_dir: Path = Path("config-backups")
     static_dir: Path = Path("ui/dist")
     password_hash: str = ""
     session_secret: str = ""
@@ -49,10 +45,6 @@ class Settings(BaseSettings):
 
     @property
     def auth_enabled(self) -> bool:
-        return self.env == "prod"
-
-    @property
-    def config_read_only(self) -> bool:
         return self.env == "prod"
 
     @property

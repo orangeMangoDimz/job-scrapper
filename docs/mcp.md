@@ -20,7 +20,8 @@ Environment variables:
 |-------------------|---------------|-----------------------------------------|
 | `MCP_HOST`        | `0.0.0.0`     | Bind address                            |
 | `MCP_PORT`        | `8080`        | Bind port                               |
-| `SCRAPER_CONFIG`  | `config.yaml` | Path to YAML config (relative or abs)   |
+| `SCRAPER_CONFIG`  | `config.yaml` | Path to the machine settings file (`concurrency`, `output_dir`, `bot`) |
+| `SCRAPER_PROXY_URL` | none, required | Proxy URL for scrapes. Empty means direct connection. Not set stops scrapes |
 | `PROXY_TEST_URL`  | `https://api.ipify.org?format=json` | URL `test_proxy_connection` fetches by default |
 | `PROXY_TEST_TIMEOUT_SEC` | `25` | Per-request timeout for that probe |
 
@@ -73,22 +74,28 @@ calling `scrape_jobs` or proposing a `update_config` patch.
 
 ### `get_config`
 
-Read-only. Returns the parsed `config.yaml` contents.
+Read-only. Returns the job settings from Mongo, with their version.
 
 **Args**: none.
 
-**Returns**: parsed YAML as a dict, identical shape to the file on disk.
+**Returns**:
 
 ```json
 {
-  "keywords": ["software engineer"],
-  "limit": 2,
-  "concurrency": 2,
-  "max_age_hours": 24,
-  "filter": {"location": ["jakarta"]},
-  "sites": {...}
+  "version": 4,
+  "updated_at": "2026-11-02T01:00:00+00:00",
+  "updated_by": "ui",
+  "settings": {
+    "keywords": ["software engineer"],
+    "limit": 2,
+    "max_age_hours": 24,
+    "filter": {"location": ["jakarta"]},
+    "sites": {}
+  }
 }
 ```
+
+Returns `{"error": "..."}` when Mongo is down or the document is missing.
 
 Always call `get_config` before `update_config` to know the current shape so
 your patch is minimal.
@@ -117,37 +124,49 @@ Use this when you need strict output formatting in downstream automations.
 
 ### `update_config`
 
-Write. Deep-merges a patch into `config.yaml`, validates, writes atomically,
-and keeps a timestamped backup.
+Write. Applies a patch to the job settings, validates the result, and keeps the old version in history.
 
 **Args**:
 
 ```json
-{ "patch": { ... } }
+{ "patch": { }, "expected_version": 4, "source": "mcp" }
 ```
 
-The `patch` is a partial config dict. Nested mappings (like `sites`) are
-deep-merged; lists and scalars are replaced entirely. To change just one
-site's URL or filter, send only that nested path.
+- `patch`: top-level keys are replaced whole. `sites` merges by site name. Each field of a site is replaced whole, so send the full `filter` or `api`. A `null` removes the key, so a site field goes back to the global value
+- `expected_version`: optional. The version you read. A mismatch saves nothing
+- `source`: `ui` or `mcp`. Kept with the version
+
+Only job setting keys are allowed. `proxy` and `concurrency` are refused.
 
 **Returns** (success):
 
 ```json
-{
-  "ok": true,
-  "applied": { /* full merged config */ },
-  "backup": "config.yaml.bak.1778323689"
-}
+{ "ok": true, "version": 5, "updated_at": "...", "updated_by": "mcp", "settings": { } }
 ```
 
-**Returns** (validation failure — file untouched):
+**Returns** (failure, nothing changed):
 
 ```json
-{
-  "ok": false,
-  "error": "validation failed: 'limit' must be >= 1, got -5"
-}
+{ "ok": false, "reason": "invalid", "message": "'limit' must be >= 1, got -5" }
 ```
+
+`reason` is `invalid`, `conflict`, or `unavailable`.
+
+### `get_config_history`
+
+Read-only. Returns up to 20 older versions, newest first.
+
+```json
+{ "entries": [ { "version": 3, "updated_at": "...", "updated_by": "seed", "keywords": ["..."], "enabled_sites": ["upwork"] } ] }
+```
+
+### `restore_config`
+
+Write. Makes an older version current. The restore creates a new version, so it can be undone.
+
+**Args**: `version`, `expected_version`, and optional `source`.
+
+**Returns**: same shape as `update_config`.
 
 #### Patch examples
 
@@ -166,14 +185,19 @@ Disable LinkedIn for the next runs:
 {"patch": {"sites": {"linkedin": {"enabled": false}}}}
 ```
 
-Add a new search location to the filter:
+Add a new search location to the filter (the whole list is replaced, so send every location):
 ```json
 {"patch": {"filter": {"location": ["jakarta", "bandung", "surabaya"]}}}
 ```
 
-Per-site filter override:
+Per-site filter override (replaces the whole filter of that site):
 ```json
 {"patch": {"sites": {"glints": {"filter": {"employment_type": "internship"}}}}}
+```
+
+Return a site field to the global value:
+```json
+{"patch": {"sites": {"glints": {"max_age_hours": null}}}}
 ```
 
 Replace LinkedIn URL template (e.g. switch to a different geoId):
@@ -183,39 +207,17 @@ Replace LinkedIn URL template (e.g. switch to a different geoId):
 
 #### Validation
 
-Every patch is materialized and run through `scraper.config_loader.load()`
-before the live file is replaced. The same rules listed in
+Every patch is merged, then run through `scraper.config_loader.parse` before
+anything is saved. The same rules listed in
 [`configuration.md`](configuration.md) apply: malformed `limit`, missing
-required keys, invalid URL placeholders, etc. all return `{ok: false, error: …}`.
-
-#### Backup and rollback
-
-A copy of `config.yaml` is saved to `config.yaml.bak.<unix-ts>` immediately
-before the new content is written. Backups are gitignored (`config.yaml.bak.*`).
-To roll back manually: `mv config.yaml.bak.<ts> config.yaml`.
-
-#### Required permissions
-
-The MCP server's bind mount must be **read-write** for `update_config` to
-succeed. Recommended compose for the MCP service:
-
-```yaml
-services:
-  scraper-mcp:
-    volumes:
-      - ./config.yaml:/app/config.yaml         # rw — drop ":ro" to allow writes
-      - ./output:/app/output                   # rw — runtime output
-      - ./docs:/app/docs:ro                    # ro — bundled markdown references
-```
-
-If the config mount is read-only, `update_config` returns
-`{ok: false, error: "write failed: ..."}`.
+required keys, invalid URL placeholders, etc. all return
+`{ok: false, reason: "invalid", message: …}`.
 
 ### `test_proxy_connection`
 
 Read-only network probe. Performs one HTTPS GET through the proxy using the
 same curl_cffi stack as the scraper fetchers (so HTTP, HTTPS, and SOCKS5 proxy
-URLs work the same as in `config.yaml`).
+URLs work the same as in a scrape).
 
 **Args** (all optional):
 
@@ -226,8 +228,8 @@ URLs work the same as in `config.yaml`).
 }
 ```
 
-- `proxy_url`: when omitted, uses the top-level `proxy` string from
-  `config.yaml`. If both are missing, returns `{ok: false, error: ...}`.
+- `proxy_url`: when omitted, uses `SCRAPER_PROXY_URL`. If both are missing,
+  returns `{ok: false, error: ...}`.
 - `url`: target URL to fetch (must be `http` or `https`). Default comes from
   `PROXY_TEST_URL` or ipify as in the env table above.
 
@@ -247,7 +249,7 @@ URLs work the same as in `config.yaml`).
 ```
 
 `proxy_redacted` masks proxy passwords. `source` is present only when the
-proxy URL came from config. On failure, `ok` is false and `error` describes
+proxy URL came from `SCRAPER_PROXY_URL`. On failure, `ok` is false and `error` describes
 validation, connection, or non-200 HTTP.
 
 The `docs:/app/docs:ro` mount makes the markdown reference docs (this file,
@@ -309,14 +311,16 @@ aggregated results.
 `results` is always grouped by keyword first, then site. `errors` collects
 any pair whose JSON couldn't be read or whose fetch failed.
 
+When the job settings cannot be loaded (Mongo is down, the document is missing, or `SCRAPER_PROXY_URL` is not set), `scrape_jobs` returns `{"ok": false, "error": "..."}` and scrapes nothing.
+
 ## Operational rules for Claude callers
 
 When asked to change scraper behavior at runtime, follow this loop:
 
 1. Call `get_config` (or `list_sites` for a higher-level view).
 2. Construct a minimal `patch` reflecting only the user's request.
-3. Call `update_config` with that patch.
-4. If `ok=false`, surface the `error` to the user — do NOT retry with a
+3. Call `update_config` with that patch and the version from `get_config`.
+4. If `ok=false`, surface the `message` to the user — do NOT retry with a
    different patch unless the user agrees. The error is from the same
    validator the scraper itself uses.
 5. On success, optionally call `scrape_jobs` to confirm the new config

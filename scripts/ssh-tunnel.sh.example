@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # REVERSE SOCKS proxy (-R): remote scraper routes outbound HTTP through this
 # machine's residential IP, dodging datacenter IP blocks on jobstreet/glints/
-# linkedin. The scraper reads `socks5://localhost:1080` from config.yaml;
+# linkedin. The scraper reads `socks5://localhost:1080` from SCRAPER_PROXY_URL;
 # scraper-mcp runs `network_mode: host`, so remote :1080 = this tunnel.
 #
 # FORWARD mongo tunnel (-L): forwards local :MONGO_PORT to remote
@@ -30,7 +30,7 @@ set -euo pipefail
 SSH_HOST="${SSH_HOST:-YOUR_SERVER_IP}"
 SSH_USER="${SSH_USER:-YOUR_SSH_USER}"
 SSH_KEY="${SSH_KEY:-}"
-PROXY_PORT="${PROXY_PORT:-1080}" # Check this from the config.yaml on "proxy" key
+PROXY_PORT="${PROXY_PORT:-1080}" # Check this against SCRAPER_PROXY_URL
 MONGO_PORT="${MONGO_PORT:-27018}"
 MONGO_ROOT_USER="${MONGO_ROOT_USER:-YOUR_MONGO_USER}"
 MONGO_ROOT_PASSWORD="${MONGO_ROOT_PASSWORD:-YOUR_MONGO_PASSWORD}"
@@ -38,8 +38,8 @@ MONGO_DB_NAME="${MONGO_DB_NAME:-job_scraper}"
 MONGO_COLLECTION_NAME="${MONGO_COLLECTION_NAME:-scrape_runs}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-job-scraper-mongo}"
 MONGO_VOLUME="${MONGO_VOLUME:-job-scrapper_mongo-data}"
-PID_FILE="/tmp/job-scrapper-ssh-socks.pid"
-MONGO_PID_FILE="/tmp/job-scrapper-ssh-mongo.pid"
+PID_FILE="/tmp/scraper-ssh-socks.pid"
+MONGO_PID_FILE="/tmp/scraper-ssh-mongo.pid"
 CMD="${1:-status}"
 
 # --- helpers ---

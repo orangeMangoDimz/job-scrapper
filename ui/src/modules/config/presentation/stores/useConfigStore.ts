@@ -5,6 +5,7 @@ import {
   toConfigChanges,
   type ConfigSnapshot,
   type ConfigValues,
+  type ConfigVersion,
 } from '@/modules/config/domain/entities/ScraperConfig'
 import { requireConfigUseCases } from '@/modules/config/presentation/stores/configUseCases'
 import { toErrorMessage } from '@/shared/utils/errorMessage'
@@ -12,21 +13,16 @@ import type { LoadStatus } from '@/shared/utils/loadStatus'
 
 const FALLBACK_ERROR_MESSAGE = 'Something went wrong. Try again.'
 
-function copyValues(values: ConfigValues): ConfigValues {
-  return {
-    ...values,
-    keywords: [...values.keywords],
-    sites: values.sites.map((site) => ({ ...site })),
-  }
-}
-
 export const useConfigStore = defineStore('config', () => {
   const status = ref<LoadStatus>('idle')
   const values = ref<ConfigValues | null>(null)
   const snapshot = ref<ConfigSnapshot | null>(null)
+  const history = ref<ConfigVersion[]>([])
   const errorMessage = ref<string | null>(null)
   const saveError = ref<string | null>(null)
+  const historyError = ref<string | null>(null)
   const isSaving = ref(false)
+  const isRestoring = ref(false)
 
   async function load(): Promise<void> {
     status.value = 'loading'
@@ -34,7 +30,7 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const next = await requireConfigUseCases().getConfig.execute()
       snapshot.value = next
-      values.value = copyValues(next.values)
+      values.value = structuredClone(next.values)
       status.value = 'ready'
     } catch (error) {
       errorMessage.value = toErrorMessage(error, FALLBACK_ERROR_MESSAGE)
@@ -42,21 +38,30 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  async function loadHistory(): Promise<void> {
+    historyError.value = null
+    try {
+      history.value = await requireConfigUseCases().getConfigHistory.execute()
+    } catch (error) {
+      historyError.value = toErrorMessage(error, FALLBACK_ERROR_MESSAGE)
+    }
+  }
+
   async function save(): Promise<boolean> {
     const current = values.value
     const loaded = snapshot.value
-    if (current === null || loaded === null || loaded.isReadOnly) {
+    if (current === null || loaded === null || loaded.isStale) {
       return false
     }
-    const changes = toConfigChanges(current, loaded.values, loaded.locked)
+    const changes = toConfigChanges(current, loaded.values)
     if (!hasConfigChanges(changes)) {
       return true
     }
     isSaving.value = true
     saveError.value = null
     try {
-      await requireConfigUseCases().saveConfig.execute(changes)
-      await load()
+      await requireConfigUseCases().saveConfig.execute(changes, loaded.version)
+      await Promise.all([load(), loadHistory()])
       return true
     } catch (error) {
       saveError.value = toErrorMessage(error, FALLBACK_ERROR_MESSAGE)
@@ -66,5 +71,38 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  return { status, values, snapshot, errorMessage, saveError, isSaving, load, save }
+  async function restore(version: number): Promise<boolean> {
+    const loaded = snapshot.value
+    if (loaded === null || loaded.isStale) {
+      return false
+    }
+    isRestoring.value = true
+    saveError.value = null
+    try {
+      await requireConfigUseCases().restoreConfig.execute(version, loaded.version)
+      await Promise.all([load(), loadHistory()])
+      return true
+    } catch (error) {
+      saveError.value = toErrorMessage(error, FALLBACK_ERROR_MESSAGE)
+      return false
+    } finally {
+      isRestoring.value = false
+    }
+  }
+
+  return {
+    status,
+    values,
+    snapshot,
+    history,
+    errorMessage,
+    saveError,
+    historyError,
+    isSaving,
+    isRestoring,
+    load,
+    loadHistory,
+    save,
+    restore,
+  }
 })
