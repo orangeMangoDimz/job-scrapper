@@ -331,12 +331,6 @@ def validate_job_settings(settings: dict[str, Any]) -> None:
     parse(settings, None)
 
 
-def load(path: Path) -> AppConfig:
-    raw = read_machine_settings(path)
-    proxy = raw.get("proxy")
-    return parse(raw, proxy if isinstance(proxy, str) else None)
-
-
 def parse(raw: dict[str, Any], proxy_url: str | None) -> AppConfig:
     keywords = _resolve_keywords(raw)
 
