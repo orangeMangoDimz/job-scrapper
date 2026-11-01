@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import {
-  EMPTY_FILTER,
-  type ConfigSnapshot,
-} from '@/modules/config/domain/entities/ScraperConfig'
+import { EMPTY_FILTER, type ConfigSnapshot } from '@/modules/config/domain/entities/ScraperConfig'
 import { provideConfigUseCases } from '@/modules/config/presentation/stores/configUseCases'
 import { useConfigStore } from '@/modules/config/presentation/stores/useConfigStore'
 

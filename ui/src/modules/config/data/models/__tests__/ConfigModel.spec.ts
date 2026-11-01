@@ -46,7 +46,11 @@ describe('toConfigSnapshot', () => {
 
     expect(snapshot.version).toBe(4)
     expect(snapshot.updatedBy).toBe('ui')
-    expect(snapshot.values.filter).toEqual({ location: ['jakarta'], employmentType: [], workType: [] })
+    expect(snapshot.values.filter).toEqual({
+      location: ['jakarta'],
+      employmentType: [],
+      workType: [],
+    })
     expect(snapshot.values.defaultFields).toEqual(['title'])
   })
 
@@ -80,7 +84,12 @@ describe('toConfigChangesModel', () => {
           isEnabled: false,
           maxAgeHours: null,
           filter: { location: [], employmentType: ['contract'], workType: [] },
-          api: { isEnabled: true, locations: ['Remote'], isCountryWide: true, delaySeconds: [4, 6] },
+          api: {
+            isEnabled: true,
+            locations: ['Remote'],
+            isCountryWide: true,
+            delaySeconds: [4, 6],
+          },
         },
       },
     })

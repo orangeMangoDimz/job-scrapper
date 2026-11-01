@@ -81,10 +81,7 @@ function toSiteChanges(site: SiteSetting, original: SiteSetting | undefined): Si
   return Object.fromEntries(changed.map((field) => [field, site[field]])) as SiteChanges
 }
 
-function toSitesChanges(
-  values: ConfigValues,
-  original: ConfigValues,
-): Record<string, SiteChanges> {
+function toSitesChanges(values: ConfigValues, original: ConfigValues): Record<string, SiteChanges> {
   const entries = values.sites.map((site): [string, SiteChanges] => [
     site.name,
     toSiteChanges(
