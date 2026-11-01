@@ -133,7 +133,7 @@ Job settings live in Mongo. The rest is baked in:
 | Want to… | How |
 |---|---|
 | Change keywords, limits, filters, sites | Edit at `/config`. Applies from the next run, no deploy |
-| Change the proxy | Update the `SCRAPER_PROXY_URL` GitHub variable → redeploy |
+| Change the proxy | Update the `SCRAPER_PROXY_URL` GitHub secret or variable → redeploy |
 | Change cron schedule | Edit `bot.schedule` in `config.yaml` → push to `main` (bot Dockerfile reads it via `yq` at build time) |
 | Change Discord message format | Edit `bot.message_template` in `config.yaml` → push to `main` (read fresh each run, no rebuild needed) |
 | Change Discord per-message cap | Edit `bot.max_chars` in `config.yaml` → push to `main` |
