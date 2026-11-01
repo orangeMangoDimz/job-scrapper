@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 MAX_LIMIT = 200
 MAX_AGE_HOURS = 720
 MAX_LIST_ITEMS = 100
+MAX_DELAY_SECONDS = 60
 
 Keyword = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 SiteName = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_-]+$", max_length=40)]
@@ -14,6 +15,7 @@ FieldName = Annotated[str, StringConstraints(pattern=r"^[a-z_]+$", max_length=40
 TextItem = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 TextList = Annotated[list[TextItem], Field(max_length=MAX_LIST_ITEMS)]
 FieldList = Annotated[list[FieldName], Field(max_length=MAX_LIST_ITEMS)]
+Delay = Annotated[float, Field(ge=0, le=MAX_DELAY_SECONDS)]
 
 
 class FilterSettings(BaseModel):
@@ -30,7 +32,7 @@ class ApiSettings(BaseModel):
     enabled: bool
     locations: TextList
     country_wide: bool
-    delay_seconds: tuple[float, float] | None = None
+    delay_seconds: tuple[Delay, Delay] | None = None
 
 
 class SiteUpdate(BaseModel):
@@ -48,7 +50,7 @@ class ConfigUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: int = Field(ge=1)
-    keywords: list[Keyword] | None = Field(default=None, min_length=1)
+    keywords: list[Keyword] | None = Field(default=None, min_length=1, max_length=MAX_LIST_ITEMS)
     limit: int | None = Field(default=None, ge=1, le=MAX_LIMIT)
     max_age_hours: int | None = Field(default=None, ge=1, le=MAX_AGE_HOURS)
     filter: FilterSettings | None = None

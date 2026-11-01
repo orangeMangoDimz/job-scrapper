@@ -7,11 +7,13 @@ from unittest.mock import MagicMock
 
 import mongomock
 import pytest
-from pymongo.errors import ServerSelectionTimeoutError
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 
 from scraper.config_loader import PROXY_ENV_VAR, ConfigError
 from scraper.job_settings import (
     KEEP_HISTORY,
+    SETTINGS_COLLECTION,
+    SETTINGS_ID,
     JobSettingsStore,
     SettingsConflictError,
     SettingsMissingError,
@@ -84,6 +86,11 @@ def test_merge_rejects_site_that_is_not_a_mapping():
         merge_settings(SETTINGS, {"sites": {"upwork": 3}})
 
 
+def test_merge_rejects_sites_that_is_not_a_mapping():
+    with pytest.raises(ConfigError, match="'sites' must be a mapping"):
+        merge_settings(SETTINGS, {"sites": None})
+
+
 def test_read_returns_seeded_settings(store: JobSettingsStore):
     stored = store.read()
 
@@ -106,6 +113,20 @@ def test_seed_keeps_existing_document(store: JobSettingsStore):
     assert store.read().settings["limit"] == 9
 
 
+def test_seed_after_lost_document_continues_after_history():
+    database = mongomock.MongoClient()["job_scraper"]
+    lost = JobSettingsStore(database)
+    lost.seed(deepcopy(SETTINGS))
+    lost.save({"limit": 5}, None, "ui")
+    lost.save({"limit": 6}, None, "ui")
+    database[SETTINGS_COLLECTION].delete_one({"_id": SETTINGS_ID})
+
+    assert lost.seed(deepcopy(SETTINGS)) is True
+    assert lost.read().version == 3
+    assert lost.save({"limit": 7}, None, "ui").version == 4
+    assert [entry.version for entry in lost.history()] == [3, 2, 1]
+
+
 def test_seed_rejects_invalid_settings():
     store = JobSettingsStore(mongomock.MongoClient()["job_scraper"])
 
@@ -122,6 +143,21 @@ def test_save_moves_to_next_version_and_keeps_old_one(store: JobSettingsStore):
     history = store.history()
     assert [entry.version for entry in history] == [1]
     assert history[0].settings["limit"] == 3
+
+
+def test_save_succeeds_when_history_write_fails(
+    store: JobSettingsStore, monkeypatch: pytest.MonkeyPatch
+):
+    def fail(previous: dict[str, Any]) -> None:
+        raise PyMongoError("history down")
+
+    monkeypatch.setattr(store, "_keep_history", fail)
+
+    saved = store.save({"limit": 9}, 1, "ui")
+
+    assert saved.version == 2
+    assert store.read().version == 2
+    assert store.read().settings["limit"] == 9
 
 
 def test_save_rejects_stale_version(store: JobSettingsStore):

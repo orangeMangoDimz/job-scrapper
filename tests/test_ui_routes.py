@@ -318,6 +318,23 @@ def test_config_update_refuses_fields_the_page_cannot_edit(client: TestClient, b
     assert client.put("/api/config", json=body).status_code == 422
 
 
+def _delay_body(delay: list[float]) -> dict:
+    api = {"enabled": True, "locations": [], "country_wide": False, "delay_seconds": delay}
+    return {"version": 4, "sites": {"jobstreet": {"api": api}}}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _delay_body([1, 61]),
+        _delay_body([61, 62]),
+        {"version": 4, "keywords": ["devops"] * 101},
+    ],
+)
+def test_config_update_refuses_values_over_the_cap(client: TestClient, body: dict):
+    assert client.put("/api/config", json=body).status_code == 422
+
+
 def test_config_update_returns_409_on_conflict(client: TestClient, gateway: FakeGateway):
     gateway.save_result = {"ok": False, "reason": "conflict", "message": "changed"}
 

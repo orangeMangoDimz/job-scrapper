@@ -19,6 +19,7 @@ from .config_loader import (
     resolve_proxy_url,
     validate_job_settings,
 )
+from .log import get_logger
 
 SETTINGS_COLLECTION = "job_settings"
 HISTORY_COLLECTION = "job_settings_history"
@@ -81,9 +82,9 @@ def _merge_site(current: dict[str, Any], name: str, patch: Any) -> dict[str, Any
 
 def merge_settings(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     merged = _apply_fields(current, {k: v for k, v in patch.items() if k != "sites"})
-    site_patches = patch.get("sites")
-    if site_patches is None:
+    if "sites" not in patch:
         return merged
+    site_patches = patch["sites"]
     if not isinstance(site_patches, dict):
         raise ConfigError("'sites' must be a mapping")
     sites = current.get("sites", {})
@@ -118,8 +119,10 @@ class JobSettingsStore:
 
     def seed(self, settings: dict[str, Any]) -> bool:
         validate_job_settings(settings)
-        document = {"_id": SETTINGS_ID, **_stamp(settings, FIRST_VERSION, SOURCE_SEED)}
         with _mongo_errors():
+            newest = self._history.find_one(sort=[("version", DESCENDING)])
+            version = FIRST_VERSION if newest is None else newest["version"] + 1
+            document = {"_id": SETTINGS_ID, **_stamp(settings, version, SOURCE_SEED)}
             try:
                 self._settings.insert_one(document)
             except DuplicateKeyError:
@@ -164,7 +167,13 @@ class JobSettingsStore:
             )
             if previous is None:
                 raise SettingsConflictError(CONFLICT_MESSAGE)
+        try:
             self._keep_history(previous)
+        except PyMongoError as exc:
+            # The new settings are already saved, so the save itself succeeded
+            get_logger().warning(
+                "Job settings saved but history was not updated (%s)", type(exc).__name__
+            )
         return _to_stored(fields)
 
     def _keep_history(self, previous: dict[str, Any]) -> None:

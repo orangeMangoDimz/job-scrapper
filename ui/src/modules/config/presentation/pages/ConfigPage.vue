@@ -63,6 +63,7 @@ onMounted(() => {
               id="limit"
               :model-value="store.values.limit ?? ''"
               type="number"
+              required
               min="1"
               @update:model-value="store.values!.limit = toOptionalNumber($event)"
             />
@@ -73,6 +74,7 @@ onMounted(() => {
               id="max-age"
               :model-value="store.values.maxAgeHours ?? ''"
               type="number"
+              :required="store.snapshot?.values.maxAgeHours !== null"
               min="1"
               @update:model-value="store.values!.maxAgeHours = toOptionalNumber($event)"
             />
