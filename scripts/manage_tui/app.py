@@ -258,7 +258,7 @@ class ManagerApp(App):
         return rows
 
     def _row_label(self, scope: str) -> str:
-        if scope == "bot" and self.env.config_merge is not None:
+        if scope == "bot" and self.env.name == "dev":
             return "bot (idles in dev)"
         return scope
 
@@ -276,7 +276,7 @@ class ManagerApp(App):
     def _scrape_widgets(self) -> list[Static | Button]:
         cfg = load_config_summary(self.env, masked_env())
         children: list[Static | Button] = [Static("scrape site:", classes="scope-label")]
-        children += [Button(site, id=f"scrape-{site}") for site in sorted(cfg.enabled_sites)]
+        children += [Button(site, id=f"scrape-{site}") for site in cfg.site_names]
         return children
 
     # ---- events ------------------------------------------------------------
@@ -477,8 +477,6 @@ class ManagerApp(App):
             f"[b]env:[/b] {env.name} — {env.description}",
             f"[b]compose:[/b] {' '.join(env.compose_files)}",
             f"[b]config:[/b] {cfg.source_label}",
-            f"[b]keywords:[/b] {', '.join(cfg.keywords) or '(none)'}",
-            f"[b]sites:[/b] {', '.join(cfg.enabled_sites) or '(none)'}",
             f"[b]proxy:[/b] {cfg.proxy}",
             f"[b]mongo:[/b] {cfg.mongo_db} / {cfg.mongo_collection}",
         ]

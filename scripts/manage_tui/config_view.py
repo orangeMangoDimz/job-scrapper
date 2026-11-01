@@ -1,11 +1,7 @@
-"""Read-only config display: .env (masked) + config.yaml (+ dev patch).
+"""Read-only config display: .env (masked) + machine settings.
 
-The displayed config is merged in Python from the SOURCE files, not read from
-the generated /tmp/config.dev.yaml. That file may be stale or absent, and
-worse, falling back to base config.yaml would mislead: the dev patch sets
-`proxy: ~` while base has a proxy enabled. Merging the source patch here shows
-the truth. The authoritative merge that the container actually mounts is still
-the `yq` step run at start time.
+Job settings live in Mongo and are edited at /config, so this view does not
+show them. Site names come from the seed file: they only change there.
 """
 
 from __future__ import annotations
@@ -18,9 +14,10 @@ import yaml
 from .model import REPO_ROOT, Environment
 
 ENV_PATH = REPO_ROOT / ".env"
-CONFIG_PATH = REPO_ROOT / "config.yaml"
+SEED_PATH = REPO_ROOT / "seeds" / "job_settings.yaml"
 
-MASK_KEYS = {"MONGO_ROOT_PASSWORD", "DISCORD_BOT_TOKEN"}
+PROXY_ENV_KEY = "SCRAPER_PROXY_URL"
+MASK_KEYS = {"MONGO_ROOT_PASSWORD", "DISCORD_BOT_TOKEN", PROXY_ENV_KEY}
 SHOWN_ENV_KEYS = (
     "MONGO_ROOT_USER",
     "MONGO_ROOT_PASSWORD",
@@ -28,15 +25,14 @@ SHOWN_ENV_KEYS = (
     "MONGO_COLLECTION_NAME",
     "DISCORD_BOT_TOKEN",
     "DISCORD_CHANNEL_ID",
-    "PROXY_URL",
+    PROXY_ENV_KEY,
 )
 
 
 @dataclass(frozen=True)
 class ConfigSummary:
     source_label: str
-    keywords: list[str]
-    enabled_sites: list[str]
+    site_names: list[str]
     proxy: str
     mongo_db: str
     mongo_collection: str
@@ -78,41 +74,23 @@ def masked_env(path: Path = ENV_PATH) -> dict[str, str]:
 
 
 def load_config_summary(env: Environment, env_vars: dict[str, str]) -> ConfigSummary:
-    base = yaml.safe_load(CONFIG_PATH.read_text()) or {}
-    if env.config_merge is not None:
-        patch_path = REPO_ROOT / env.config_merge.patch
-        patch = (yaml.safe_load(patch_path.read_text()) or {}) if patch_path.exists() else {}
-        merged = _deep_merge(base, patch)
-        label = f"{env.name} (config.yaml + {env.config_merge.patch})"
-    else:
-        merged = base
-        label = f"{env.name} (config.yaml)"
-
-    proxy_value = merged.get("proxy")
-    sites = merged.get("sites") or {}
-    enabled_sites = [
-        name for name, body in sites.items() if isinstance(body, dict) and body.get("enabled")
-    ]
-
+    seed = yaml.safe_load(SEED_PATH.read_text()) or {}
     return ConfigSummary(
-        source_label=label,
-        keywords=[str(k) for k in (merged.get("keywords") or [])],
-        enabled_sites=sorted(enabled_sites),
-        proxy=str(proxy_value) if proxy_value else "(disabled)",
+        source_label=f"{env.name} (job settings in Mongo, edit at /config)",
+        site_names=sorted(seed.get("sites") or {}),
+        proxy=_proxy_label(env, env_vars),
         mongo_db=env_vars.get("MONGO_DB_NAME", "job_scraper"),
         mongo_collection=env_vars.get("MONGO_COLLECTION_NAME", "scrape_runs"),
     )
 
 
-def _deep_merge(base: dict, patch: dict) -> dict:
-    """Recursive dict merge; scalars and lists are replaced (matches yq's *)."""
-    out = dict(base)
-    for key, value in patch.items():
-        if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = _deep_merge(out[key], value)
-        else:
-            out[key] = value
-    return out
+def _proxy_label(env: Environment, env_vars: dict[str, str]) -> str:
+    if env.proxy is not None:
+        return env.proxy.check_url
+    value = env_vars.get(PROXY_ENV_KEY)
+    if value is None:
+        return f"({PROXY_ENV_KEY} not set in .env: scrapes will stop)"
+    return "(disabled)" if value == "(empty)" else value
 
 
 def _mask(value: str) -> str:
