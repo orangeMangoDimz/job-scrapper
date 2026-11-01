@@ -19,7 +19,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_BASE="docker-compose.yml"
 COMPOSE_ENV="docker-compose.dev.yml"
-MERGED_CONFIG="/tmp/config.dev.yaml"
 cd "$REPO_ROOT"
 
 if [ -f "$REPO_ROOT/.env" ]; then
@@ -28,11 +27,6 @@ fi
 
 : "${DISCORD_BOT_TOKEN:?set DISCORD_BOT_TOKEN before running}"
 : "${DISCORD_CHANNEL_ID:?set DISCORD_CHANNEL_ID before running}"
-
-if ! command -v yq &>/dev/null; then
-  echo "ERROR: yq not found — install it first: https://github.com/mikefarah/yq" >&2
-  exit 1
-fi
 
 if [ ! -d "$HOME/.claude" ]; then
   echo "Claude config dir not found at $HOME/.claude" >&2
@@ -43,12 +37,6 @@ if [ ! -f "$HOME/.claude.json" ]; then
   echo "Claude config file not found at $HOME/.claude.json" >&2
   exit 1
 fi
-
-echo "==> Merging config.yaml + config.dev.patch.yaml -> ${MERGED_CONFIG}..."
-yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' \
-  "$REPO_ROOT/config.yaml" \
-  "$REPO_ROOT/config.dev.patch.yaml" \
-  > "$MERGED_CONFIG"
 
 cleanup() {
   echo "==> Stopping MCP stack..."

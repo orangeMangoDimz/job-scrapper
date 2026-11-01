@@ -63,3 +63,9 @@ def test_main_reports_invalid_file(
 
     assert seed_settings.main(["--file", str(path)]) == 2
     assert "keywords" in capsys.readouterr().err
+
+
+def test_config_file_holds_no_job_settings():
+    config = yaml.safe_load((REPO_ROOT / "config.yaml").read_text())
+
+    assert set(config) == {"concurrency", "output_dir", "bot"}
