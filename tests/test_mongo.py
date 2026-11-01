@@ -127,3 +127,11 @@ def test_update_run_does_not_mutate_input():
             original,
         )
     assert "_updated_at" not in original  # input patch must stay untouched
+
+
+def test_get_database_uses_configured_name():
+    client = MagicMock()
+    with patch.object(mongo_module, "_get_client", return_value=client):
+        database = mongo_module.get_database()
+    assert database is client.__getitem__.return_value
+    client.__getitem__.assert_called_once_with(mongo_module._DB_NAME)

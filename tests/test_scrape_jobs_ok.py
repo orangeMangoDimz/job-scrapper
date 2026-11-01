@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from scraper.job_settings import SettingsMissingError
 from scraper.types import JOB_FIELD_ORDER
 
 
@@ -286,3 +287,12 @@ def test_get_scrape_response_structure_exposes_canonical_fields():
         "errors",
         "mongo_id",
     ]
+
+
+@patch("mcp_server.server._load_config", side_effect=SettingsMissingError("settings missing"))
+def test_ok_false_when_settings_cannot_load(mock_load):
+    from mcp_server.server import scrape_jobs
+
+    result = scrape_jobs(keywords=["data analyst"], sites=["jobstreet"])
+
+    assert result == {"ok": False, "error": "settings missing"}

@@ -3,16 +3,13 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import shutil
-import tempfile
 import time
-from copy import deepcopy
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse, urlunparse
 
-import yaml
 from mcp.server.fastmcp import FastMCP  # type: ignore[import-untyped]
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -20,7 +17,15 @@ from starlette.responses import JSONResponse, Response
 
 from mcp_server import mongo
 from scraper.config import ACCEPT_LANGUAGE, USER_AGENT
-from scraper.config_loader import AppConfig, ConfigError, keyword_slug, load
+from scraper.config_loader import AppConfig, ConfigError, keyword_slug
+from scraper.job_settings import (
+    JobSettingsStore,
+    SettingsConflictError,
+    SettingsMissingError,
+    SettingsUnavailableError,
+    StoredSettings,
+    load_app_config,
+)
 from scraper.log import get_logger as _get_logger
 from scraper.runner import run as run_scraper
 from scraper.types import JOB_FIELD_ORDER
@@ -40,6 +45,8 @@ _LOG_PATH = Path("logs/scraper.log")
 
 mcp = FastMCP("job-scraper", host=HOST, port=PORT)
 
+SaveSource = Literal["ui", "mcp"]
+
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> Response:
@@ -55,8 +62,12 @@ async def health_check(request: Request) -> Response:
     return JSONResponse({"status": "ok", "mongo": "ok"})
 
 
+def _settings_store() -> JobSettingsStore:
+    return JobSettingsStore(mongo.get_database())
+
+
 def _load_config(path: Path) -> AppConfig:
-    return load(path)
+    return load_app_config(path, _settings_store())
 
 
 def _read_site_output(config: AppConfig, keyword: str, name: str) -> dict[str, Any] | None:
@@ -118,21 +129,37 @@ def _build_note(errors: list[dict[str, Any]]) -> str | None:
     return f"scrape failed — {reasons}"
 
 
-def _deep_merge(base: dict, patch: dict) -> dict:
-    result = deepcopy(base)
-    for key, value in patch.items():
-        if isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = value
-    return result
+def _to_payload(stored: StoredSettings) -> dict[str, Any]:
+    return {
+        "version": stored.version,
+        "updated_at": stored.updated_at,
+        "updated_by": stored.updated_by,
+        "settings": stored.settings,
+    }
 
 
-def _atomic_write_yaml(path: Path, data: dict) -> None:
-    serialized = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(serialized)
-    tmp_path.replace(path)
+def _to_history_entry(entry: StoredSettings) -> dict[str, Any]:
+    sites = entry.settings.get("sites", {})
+    return {
+        "version": entry.version,
+        "updated_at": entry.updated_at,
+        "updated_by": entry.updated_by,
+        "keywords": entry.settings.get("keywords", []),
+        "enabled_sites": [name for name, site in sites.items() if site.get("enabled", True)],
+    }
+
+
+def _save_result(save: Callable[[], StoredSettings]) -> dict[str, Any]:
+    # The key is "message", not "error": the UI gateway treats "error" as an outage
+    try:
+        stored = save()
+    except SettingsConflictError as exc:
+        return {"ok": False, "reason": "conflict", "message": str(exc)}
+    except (SettingsMissingError, SettingsUnavailableError) as exc:
+        return {"ok": False, "reason": "unavailable", "message": str(exc)}
+    except ConfigError as exc:
+        return {"ok": False, "reason": "invalid", "message": str(exc)}
+    return {"ok": True, **_to_payload(stored)}
 
 
 def _redact_proxy_url(proxy_url: str) -> str:
@@ -319,7 +346,7 @@ def _normalize_site_payload(
 
 @mcp.tool()
 def list_sites() -> dict[str, Any]:
-    """List sites declared in config.yaml with their enabled status.
+    """List sites from the job settings with their enabled status.
 
     Each site shows its raw url_template plus a sample resolved URL formatted
     against the first configured keyword. The full keyword list is also returned.
@@ -346,18 +373,15 @@ def list_sites() -> dict[str, Any]:
 
 @mcp.tool()
 def get_config() -> dict[str, Any]:
-    """Return the current config.yaml contents as a parsed dict.
+    """Return the job settings stored in Mongo, with their version.
 
-    Use this before update_config to inspect the current shape, then send a
+    Use this before update_config to see the current shape, then send a
     minimal patch to change only what you want.
     """
-    if not DEFAULT_CONFIG_PATH.exists():
-        return {"error": f"config file not found: {DEFAULT_CONFIG_PATH}"}
     try:
-        raw = yaml.safe_load(DEFAULT_CONFIG_PATH.read_text())
-    except yaml.YAMLError as exc:
-        return {"error": f"invalid YAML: {exc}"}
-    return raw if isinstance(raw, dict) else {}
+        return _to_payload(_settings_store().read())
+    except ConfigError as exc:
+        return {"error": str(exc)}
 
 
 @mcp.tool()
@@ -420,67 +444,62 @@ def get_scrape_response_structure() -> dict[str, Any]:
 
 
 @mcp.tool()
-def update_config(patch: dict[str, Any]) -> dict[str, Any]:
-    """Deep-merge a patch into config.yaml after validating the result.
+def update_config(
+    patch: dict[str, Any],
+    expected_version: int | None = None,
+    source: SaveSource = "mcp",
+) -> dict[str, Any]:
+    """Apply a patch to the job settings after validating the result.
 
-    The patch is merged into the existing config (nested dicts are merged
-    recursively; lists and scalars are replaced). The merged document is
-    validated using the same loader the scraper itself uses; on validation
-    failure, the file is left untouched and the error is returned.
-
-    A timestamped backup (config.yaml.bak.<unix-ts>) is created before the
-    new file is written atomically.
+    Top-level keys are replaced whole. `sites` merges by site name, and each
+    field of a site is replaced whole. A null value removes that key, so a site
+    field goes back to the global value. The old version is kept in history.
 
     Args:
-        patch: dict to merge in. Examples:
+        patch: changes to apply. Examples:
             {"keywords": ["data analyst"]}
             {"max_age_hours": 24}
             {"sites": {"linkedin": {"enabled": false}}}
-            {"sites": {"glints": {"max_age_hours": 12}}}
+            {"sites": {"glints": {"max_age_hours": null}}}
+        expected_version: version you read with get_config. When it is not the
+            current version, nothing is saved and reason is "conflict".
+        source: who made the change, kept with the version.
 
     Returns:
-        On success: {ok: True, applied: <merged>, backup: <path>}
-        On failure: {ok: False, error: <reason>}
+        On success: {ok: True, version, updated_at, updated_by, settings}
+        On failure: {ok: False, reason, message}. reason is "invalid",
+        "conflict", or "unavailable".
     """
-    if not isinstance(patch, dict):
-        return {"ok": False, "error": "patch must be a dict"}  # pyright: ignore[reportUnreachable]
-    if not DEFAULT_CONFIG_PATH.exists():
-        return {"ok": False, "error": f"config file not found: {DEFAULT_CONFIG_PATH}"}
+    return _save_result(lambda: _settings_store().save(patch, expected_version, source))
 
+
+@mcp.tool()
+def get_config_history() -> dict[str, Any]:
+    """Return the saved older versions of the job settings, newest first."""
     try:
-        current = yaml.safe_load(DEFAULT_CONFIG_PATH.read_text()) or {}
-    except yaml.YAMLError as exc:
-        return {"ok": False, "error": f"invalid YAML in current config: {exc}"}
-    if not isinstance(current, dict):
-        return {"ok": False, "error": "current config root must be a mapping"}
-
-    merged = _deep_merge(current, patch)
-
-    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as fh:
-        yaml.safe_dump(merged, fh, sort_keys=False, allow_unicode=True)
-        validation_tmp = Path(fh.name)
-    try:
-        load(validation_tmp)
+        entries = _settings_store().history()
     except ConfigError as exc:
-        validation_tmp.unlink(missing_ok=True)
-        return {"ok": False, "error": f"validation failed: {exc}"}
-    finally:
-        validation_tmp.unlink(missing_ok=True)
+        return {"error": str(exc)}
+    return {"entries": [_to_history_entry(entry) for entry in entries]}
 
-    backup_path = DEFAULT_CONFIG_PATH.with_name(
-        f"{DEFAULT_CONFIG_PATH.name}.bak.{int(time.time())}"
-    )
-    try:
-        shutil.copy2(DEFAULT_CONFIG_PATH, backup_path)
-    except OSError as exc:
-        return {"ok": False, "error": f"backup failed: {exc}"}
 
-    try:
-        _atomic_write_yaml(DEFAULT_CONFIG_PATH, merged)
-    except OSError as exc:
-        return {"ok": False, "error": f"write failed: {exc}"}
+@mcp.tool()
+def restore_config(
+    version: int, expected_version: int, source: SaveSource = "mcp"
+) -> dict[str, Any]:
+    """Make an older saved version the current job settings.
 
-    return {"ok": True, "applied": merged, "backup": str(backup_path)}
+    The restore creates a new version, so it can be undone the same way.
+
+    Args:
+        version: the saved version to bring back.
+        expected_version: the current version you read with get_config.
+        source: who made the change, kept with the version.
+
+    Returns:
+        The same shape as update_config.
+    """
+    return _save_result(lambda: _settings_store().restore(version, expected_version, source))
 
 
 @mcp.tool()
@@ -590,8 +609,8 @@ def test_proxy_connection(
     SOCKS5 URLs as supported by curl_cffi).
 
     Args:
-        proxy_url: optional override; when omitted, uses ``proxy`` from
-            config.yaml. When config has no proxy and this is omitted, returns
+        proxy_url: optional override; when omitted, uses
+            ``SCRAPER_PROXY_URL``. When no proxy is set and this is omitted, returns
             an error.
         url: optional URL to fetch (default: ``PROXY_TEST_URL`` env or
             https://api.ipify.org?format=json). Must be http or https.
@@ -623,7 +642,8 @@ def test_proxy_connection(
             return {
                 "ok": False,
                 "error": (
-                    "no proxy in config.yaml and proxy_url not passed — set proxy or pass proxy_url"
+                    "no proxy set in SCRAPER_PROXY_URL and proxy_url not passed — "
+                    "set it or pass proxy_url"
                 ),
             }
         resolved_proxy = config.proxy.url
@@ -670,10 +690,10 @@ def scrape_jobs(
 
     Args:
         sites: optional list of site names to scrape. When omitted, runs every
-            site marked enabled in config.yaml.
+            site marked enabled in the job settings.
         keywords: optional list of keywords to scrape. When omitted, runs every
-            keyword in config.yaml. Useful to ad-hoc query a single term without
-            editing config.yaml.
+            keyword in the job settings. Useful to ad-hoc query a single term without
+            changing the job settings.
         save_run: when false, return the results without storing the run in
             Mongo, so it never reaches the scrape history. mongo_id is then null.
 
@@ -714,7 +734,7 @@ def scrape_jobs(
         config = _load_config(DEFAULT_CONFIG_PATH)
     except ConfigError as exc:
         log.error("scrape_jobs config error: %s", exc)
-        return {"error": str(exc)}
+        return {"ok": False, "error": str(exc)}
 
     target_sites = list(sites) if sites else list(config.enabled_site_names())
     target_keywords = list(keywords) if keywords else list(config.keywords)

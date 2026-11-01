@@ -26,8 +26,12 @@ def _get_client() -> Any:
     return _client
 
 
+def get_database() -> Any:
+    return _get_client()[_DB_NAME]
+
+
 def get_collection() -> Any:
-    return _get_client()[_DB_NAME][_COLLECTION_NAME]
+    return get_database()[_COLLECTION_NAME]
 
 
 def ping() -> None:
