@@ -36,6 +36,10 @@ case "$ARG" in
     ;;
 esac
 
+# --- shared network ---
+# docker-compose.yml declares job-net as external, so compose will not create it.
+docker network inspect job-net >/dev/null 2>&1 || docker network create job-net >/dev/null
+
 # --- run ---
 cd "$REPO_ROOT"
 

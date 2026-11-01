@@ -475,6 +475,9 @@ http://localhost:5174:
 - Dev config edits write `config.yaml` and refresh `/tmp/config.dev.yaml`. Backups go
   to `config-backups/`. Fields set in `config.dev.patch.yaml` are locked
 - Prod is public through Caddy with one password. Config is read-only there
+- Compose needs the external `job-net` network. The scripts in `scripts/` create it.
+  With plain `docker compose` or `scripts/manage.py`, run `docker network create job-net`
+  once first
 
 # The scraping prompt (prompts/scrape-and-post.md)
 
