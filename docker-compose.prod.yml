@@ -3,12 +3,55 @@ services:
   # override: use pre-built image from ghcr.io; host networking gives access to
   # localhost:1080 (reverse SSH proxy tunnel) and localhost:27017 (mongo published port).
   # MONGO_URI must point to localhost (not 'mongo' DNS which is bridge-only).
+  # MCP_HOST is the Docker gateway: containers reach it through host.docker.internal,
+  # and the public cannot. Do not use 127.0.0.1, it would cut off the bot.
   scraper-mcp:
     image: ${MCP_IMAGE:-job-scraper-mcp:latest}
     network_mode: host
+    networks: !reset []
+    ports: !reset []
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://${MCP_BIND_HOST:-172.17.0.1}:8080/health"]
     environment:
       - MONGO_URI=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD}@localhost:27017
+      - MCP_HOST=${MCP_BIND_HOST:-172.17.0.1}
 
   # override: use pre-built image from ghcr.io
   bot:
     image: ${BOT_IMAGE:-job-scraper-bot:latest}
+
+  # override: pre-built image; reached only through caddy, so no published port
+  scraper-ui:
+    image: ${UI_IMAGE:-job-scraper-ui:latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - UI_ENV=prod
+      - UI_MCP_URL=http://host.docker.internal:8080/mcp
+      - UI_PASSWORD_HASH=${UI_PASSWORD_HASH:-}
+      - UI_SESSION_SECRET=${UI_SESSION_SECRET:-}
+      - UI_DOMAIN=${UI_DOMAIN:-}
+      - FORWARDED_ALLOW_IPS=*
+
+  # SERVICE: caddy — public HTTPS entry for scraper-ui; certificates renew automatically
+  caddy:
+    image: caddy:2-alpine
+    container_name: job-scraper-caddy
+    restart: unless-stopped
+    profiles: ["ui"]
+    depends_on:
+      - scraper-ui
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - UI_DOMAIN=${UI_DOMAIN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

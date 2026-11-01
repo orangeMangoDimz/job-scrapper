@@ -24,7 +24,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PATH=/home/pwuser/.local/bin:/usr/local/bin:/usr/bin:/bin
 
-RUN mkdir -p /app/output \
+RUN mkdir -p /app/output /app/logs \
  && chown -R pwuser:pwuser /app
 
 COPY --from=builder --chown=pwuser:pwuser /root/.local /home/pwuser/.local
@@ -61,6 +61,52 @@ ENV MCP_HOST=0.0.0.0 \
 EXPOSE 8080
 
 ENTRYPOINT ["python", "-m", "mcp_server.server"]
+CMD []
+
+
+# =============================================================================
+# STAGE: ui-build — compiles the Vue app into ui/dist
+# =============================================================================
+FROM oven/bun:1.4.4-slim AS bun-binary
+
+FROM node:24-slim AS ui-build
+
+COPY --from=bun-binary /usr/local/bin/bun /usr/local/bin/bun
+WORKDIR /ui
+COPY ui/package.json ui/bun.lock ./
+RUN bun install --frozen-lockfile
+COPY ui/ ./
+RUN bun run build
+
+
+# =============================================================================
+# STAGE: ui-server — FastAPI service that also serves the Vue build, port 8090
+# =============================================================================
+FROM python:3.13-slim AS ui-server
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UI_HOST=0.0.0.0
+
+RUN useradd --uid 1001 --create-home uiuser \
+ && mkdir -p /app/output /app/logs /app/config-backups \
+ && chown -R uiuser:uiuser /app
+
+WORKDIR /app
+
+COPY ui_server/requirements.txt ./ui-requirements.txt
+RUN pip install --no-cache-dir -r ui-requirements.txt
+
+COPY --chown=uiuser:uiuser scraper/__init__.py scraper/config_loader.py scraper/types.py ./scraper/
+COPY --chown=uiuser:uiuser ui_server ./ui_server
+COPY --chown=uiuser:uiuser --from=ui-build /ui/dist ./ui/dist
+
+USER uiuser
+
+EXPOSE 8090
+
+ENTRYPOINT ["python", "-m", "ui_server"]
 CMD []
 
 

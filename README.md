@@ -456,6 +456,29 @@ Then run `/mcp` to list available servers and tools. The MCP server exposes:
 | **Discord** | Posts one test message to your Discord channel from the bot container                       |
 | **Cron**    | Fires the full cron job once (`run-scraper.sh`) — real scrape + real Discord posts          |
 
+# Scraper UI
+
+Web control panel for this repo: run scrapes, see results, edit config, and watch
+live logs. It does not depend on the job-agent frontend or backend.
+
+Start it in dev, then open http://127.0.0.1:8090:
+
+    ./scripts/run_dev.sh ui
+
+For Vue hot reload, keep the stack running and start Vite, then open
+http://localhost:5174:
+
+    cd ui && bun install && bun run dev
+
+- Runs go through `scraper-mcp`, one at a time, with no stop button
+- Each run is saved to `output/ui-runs/<run_id>/`, last 50 kept, and also to Mongo
+- Dev config edits write `config.yaml` and refresh `/tmp/config.dev.yaml`. Backups go
+  to `config-backups/`. Fields set in `config.dev.patch.yaml` are locked
+- Prod is public through Caddy with one password. Config is read-only there
+- Compose needs the external `job-net` network. The scripts in `scripts/` create it.
+  With plain `docker compose` or `scripts/manage.py`, run `docker network create job-net`
+  once first
+
 # The scraping prompt (prompts/scrape-and-post.md)
 
 This markdown file is what cron feeds to Claude on every run. It drives the full

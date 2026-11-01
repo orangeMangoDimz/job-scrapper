@@ -18,3 +18,8 @@ Dockerfile
 .dockerignore
 README.md
 docs
+ui/node_modules
+ui/dist
+config-backups
+logs
+.delta

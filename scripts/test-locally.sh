@@ -56,6 +56,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# --- shared network ---
+# docker-compose.yml declares job-net as external, so compose will not create it.
+docker network inspect job-net >/dev/null 2>&1 || docker network create job-net >/dev/null
+
 echo "==> Building images..."
 docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_ENV" build scraper-mcp bot
 

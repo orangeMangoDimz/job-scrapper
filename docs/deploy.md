@@ -24,11 +24,14 @@ Both also tagged as `:mcp-latest` / `:bot-latest`.
 
 1. **build-mcp** — build `mcp-server` Dockerfile target → push
 2. **build-bot** — build `bot` Dockerfile target → push (parallel with build-mcp)
-3. **deploy-mcp** — SSH, `docker pull` + replace `scraper-mcp` container
-4. **deploy-bot** — SSH, `docker pull` + replace `scraper-bot` container with secrets injected
+3. **build-ui** — build `ui-server` Dockerfile target → push (parallel with build-mcp)
+4. **deploy-mcp** — SSH, `docker pull` + replace `scraper-mcp` container
+5. **deploy-bot** — SSH, `docker pull` + replace `scraper-bot` container with secrets injected
+6. **deploy-ui** — SSH, `docker pull` + replace `scraper-ui` and start Caddy
 
 deploy-bot runs after deploy-mcp so the MCP server is up before the bot
-starts cron-firing.
+starts cron-firing. deploy-ui runs last, so two deploys never touch the
+VPS at the same time.
 
 ## Required GitHub secrets
 
@@ -36,11 +39,13 @@ Repo → Settings → Secrets and variables → Actions → **Secrets** tab.
 
 | Secret | Used by | Value |
 |---|---|---|
-| `SSH_HOST` | both deploy jobs | `43.157.226.237` |
-| `SSH_USER` | both deploy jobs | `ubuntu` |
-| `SSH_PRIVATE_KEY` | both deploy jobs | private key for VPS SSH |
+| `SSH_HOST` | all deploy jobs | `43.157.226.237` |
+| `SSH_USER` | all deploy jobs | `ubuntu` |
+| `SSH_PRIVATE_KEY` | all deploy jobs | private key for VPS SSH |
 | `DISCORD_BOT_TOKEN` | deploy-bot | Discord application bot token (with Send Messages perm in target channel) |
 | `DISCORD_CHANNEL_ID` | deploy-bot | Discord channel ID where job posts go |
+| `UI_PASSWORD_HASH` | deploy-ui | Argon2 hash of the UI password, see `.env.example` |
+| `UI_SESSION_SECRET` | deploy-ui | Random string, at least 32 characters, see `.env.example` |
 
 `GITHUB_TOKEN` is auto-provided — used to push to ghcr.io.
 
@@ -53,6 +58,8 @@ anyone with read access). Use these for non-secret config:
 |---|---|---|
 | `CLAUDE_CONFIG_DIR` | deploy-bot | `/home/ubuntu/.claude` (host path mounted into bot for Claude session auth) |
 | `CLAUDE_CONFIG_FILE` | deploy-bot | `/home/ubuntu/.claude.json` (host file mounted into bot) |
+| `UI_DOMAIN` | deploy-ui | Public domain for the UI, with DNS pointing to the VPS |
+| `MCP_BIND_HOST` | all deploy jobs | Optional. Docker gateway IP of the VPS, default `172.17.0.1` |
 
 ## Claude Code authentication
 
@@ -93,9 +100,14 @@ scraper-bot reaches scraper-mcp via `host.docker.internal:8080` — the
 `docker run` exposes the VPS host as a resolvable name from inside the
 bot container. The bot's baked-in `.mcp.json` points at this URL.
 
-scraper-mcp listens on the host's port 8080 directly, so anything else
-on the VPS (or off it, with firewall rules) can also reach it via that
-port.
+scraper-mcp listens on the Docker gateway address (`MCP_BIND_HOST`, default
+`172.17.0.1`), so containers on the VPS can reach it through
+`host.docker.internal:8080` and the public cannot. Do not set it to `127.0.0.1`,
+which would cut off the bot.
+
+scraper-ui has no published port. Caddy is its only public entry, on ports 80 and
+443. Required before the first deploy: `UI_PASSWORD_HASH` and `UI_SESSION_SECRET`
+secrets, a `UI_DOMAIN` variable, and a DNS record pointing to the VPS.
 
 ## ghcr.io image visibility
 

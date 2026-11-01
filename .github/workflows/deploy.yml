@@ -93,6 +93,49 @@ jobs:
             ${{ steps.tags.outputs.latest }}
             ${{ steps.tags.outputs.sha }}
 
+  # 2b. Build scraper UI Docker image and push to ghcr.io
+  build-ui:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag_sha: ${{ steps.tags.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tags
+        id: tags
+        run: |
+          # ghcr.io requires lowercase; github.repository may contain uppercase chars
+          REPO_LOWER=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          # rolling tag — always points to the newest build
+          echo "latest=ghcr.io/${REPO_LOWER}:ui-latest" >> "$GITHUB_OUTPUT"
+          # immutable tag pinned to this exact commit, used for deployment
+          echo "sha=ghcr.io/${REPO_LOWER}:ui-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push scraper-ui image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: ui-server
+          push: true
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui
+          tags: |
+            ${{ steps.tags.outputs.latest }}
+            ${{ steps.tags.outputs.sha }}
+
   # 3. SSH into VPS → pull new MCP image → restart container (runs after build-mcp)
   deploy-mcp:
     needs: build-mcp
@@ -106,7 +149,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: mkdir -p ~/job-scrapper
+          script: mkdir -p ~/scraper
 
       - name: Copy compose files
         uses: appleboy/scp-action@v0.1.7
@@ -115,7 +158,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "docker-compose.yml,docker-compose.prod.yml"
-          target: "~/job-scrapper"
+          target: "~/scraper"
 
       - name: Deploy scraper-mcp
         uses: appleboy/ssh-action@v1.2.0
@@ -123,13 +166,21 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME
+          envs: MCP_IMAGE,MONGO_ROOT_USER,MONGO_ROOT_PASSWORD,MONGO_DB_NAME,MONGO_COLLECTION_NAME,MCP_BIND_HOST
           script: |
             set -euo pipefail
-            cd ~/job-scrapper
+            # one-time migration: stop stack from pre-rename dir ~/job-scrapper (volume kept)
+            if [ -d ~/job-scrapper ]; then
+              if [ -f ~/job-scrapper/.env ] && [ ! -f ~/scraper/.env ]; then cp ~/job-scrapper/.env ~/scraper/.env; fi
+              docker compose -p job-scrapper down 2>/dev/null || true
+            fi
+
+            cd ~/scraper
 
             # one-time migration: remove legacy docker run container (different name, same port)
             docker rm -f scraper-mcp 2>/dev/null || true
+
+            docker network inspect job-net >/dev/null 2>&1 || docker network create job-net
 
             C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
             $C --profile mcp pull
@@ -141,6 +192,7 @@ jobs:
           MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
           MONGO_DB_NAME: ${{ vars.MONGO_DB_NAME || 'job_scraper' }}
           MONGO_COLLECTION_NAME: ${{ vars.MONGO_COLLECTION_NAME || 'scrape_runs' }}
+          MCP_BIND_HOST: ${{ vars.MCP_BIND_HOST || '172.17.0.1' }}
 
   # 4. SSH into VPS → pull new bot image → restart container (runs after build-bot + deploy-mcp)
   deploy-bot:
@@ -155,7 +207,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: mkdir -p ~/job-scrapper
+          script: mkdir -p ~/scraper
 
       - name: Copy compose files
         uses: appleboy/scp-action@v0.1.7
@@ -164,7 +216,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "docker-compose.yml,docker-compose.prod.yml"
-          target: "~/job-scrapper"
+          target: "~/scraper"
 
       - name: Deploy scraper-bot
         uses: appleboy/ssh-action@v1.2.0
@@ -172,10 +224,10 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: BOT_IMAGE,DISCORD_BOT_TOKEN,DISCORD_CHANNEL_ID,CLAUDE_CONFIG_DIR,CLAUDE_CONFIG_FILE,TZ
+          envs: BOT_IMAGE,DISCORD_BOT_TOKEN,DISCORD_CHANNEL_ID,CLAUDE_CONFIG_DIR,CLAUDE_CONFIG_FILE,TZ,MCP_BIND_HOST
           script: |
             set -euo pipefail
-            cd ~/job-scrapper
+            cd ~/scraper
 
             # one-time migration: remove legacy docker run container (different name)
             docker rm -f scraper-bot 2>/dev/null || true
@@ -191,3 +243,50 @@ jobs:
           CLAUDE_CONFIG_DIR: ${{ vars.CLAUDE_CONFIG_DIR }}
           CLAUDE_CONFIG_FILE: ${{ vars.CLAUDE_CONFIG_FILE }}
           TZ: ${{ vars.TZ || 'Asia/Jakarta' }}
+          MCP_BIND_HOST: ${{ vars.MCP_BIND_HOST || '172.17.0.1' }}
+
+  # 5. SSH into VPS → pull new UI image → restart UI and Caddy (runs after build-ui + deploy-bot)
+  deploy-ui:
+    needs: [build-ui, deploy-bot]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure deploy dir
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: mkdir -p ~/scraper
+
+      - name: Copy compose files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml,Caddyfile"
+          target: "~/scraper"
+
+      - name: Deploy scraper-ui
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: UI_IMAGE,UI_PASSWORD_HASH,UI_SESSION_SECRET,UI_DOMAIN,MCP_BIND_HOST
+          script: |
+            set -euo pipefail
+            cd ~/scraper
+
+            C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+            $C --profile ui pull
+            $C --profile ui up -d --no-build
+            $C ps
+        env:
+          UI_IMAGE: ${{ needs.build-ui.outputs.image_tag_sha }}
+          UI_PASSWORD_HASH: ${{ secrets.UI_PASSWORD_HASH }}
+          UI_SESSION_SECRET: ${{ secrets.UI_SESSION_SECRET }}
+          UI_DOMAIN: ${{ vars.UI_DOMAIN }}
+          MCP_BIND_HOST: ${{ vars.MCP_BIND_HOST || '172.17.0.1' }}
