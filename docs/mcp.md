@@ -266,12 +266,16 @@ aggregated results.
 ```json
 {
   "sites": ["linkedin", "indeed"],
-  "keywords": ["data analyst"]
+  "keywords": ["data analyst"],
+  "save_run": true
 }
 ```
 
 - `sites`: list of site names to scrape. Omitted = all enabled sites.
 - `keywords`: list of keywords to scrape. Omitted = all configured keywords.
+- `save_run`: store the run in MongoDB. Omitted = `true`. The job-match search
+  box and the scraper UI send `false`, so their results are shown once and stay
+  out of the scrape history. `mongo_id` is then `null`.
 
 **Returns**:
 
