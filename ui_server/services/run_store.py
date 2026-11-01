@@ -18,6 +18,7 @@ RUN_ID_PATTERN = re.compile(r"^\d{8}T\d{6}Z-[0-9a-f]{6}$")
 RECORD_FILE = "run.json"
 RESULT_FILE = "result.json"
 INTERRUPTED_MESSAGE = "The UI service restarted during this run."
+UNREADABLE_ERRORS = (OSError, ValueError, KeyError, TypeError)
 
 
 class RunStatus(StrEnum):
@@ -128,16 +129,25 @@ class RunStore:
         path = self._record_path(run_id)
         if not path.exists():
             raise RunNotFoundError()
-        return _to_record(json.loads(path.read_text(encoding="utf-8")))
+        try:
+            return _to_record(json.loads(path.read_text(encoding="utf-8")))
+        except UNREADABLE_ERRORS as exc:
+            LOG.warning("unreadable run record %s: %s", run_id, exc)
+            raise RunNotFoundError() from exc
 
     def read_result(self, run_id: str) -> dict[str, Any]:
         path = self._record_path(run_id).with_name(RESULT_FILE)
         if not path.exists():
             return {}
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except UNREADABLE_ERRORS as exc:
+            LOG.warning("unreadable run result %s: %s", run_id, exc)
+            return {}
 
     def list_recent(self) -> tuple[RunRecord, ...]:
-        return tuple(self.get(run_id) for run_id in reversed(self._run_ids()))
+        records = (self._read_or_none(run_id) for run_id in reversed(self._run_ids()))
+        return tuple(record for record in records if record is not None)
 
     def mark_interrupted(self) -> None:
         for record in self.list_recent():
@@ -156,6 +166,12 @@ class RunStore:
         for run_id in run_ids[: max(len(run_ids) - self._keep_runs, 0)]:
             shutil.rmtree(self._run_dir(run_id))
             LOG.info("removed old run folder %s", run_id)
+
+    def _read_or_none(self, run_id: str) -> RunRecord | None:
+        try:
+            return self.get(run_id)
+        except RunNotFoundError:
+            return None
 
     def _run_ids(self) -> list[str]:
         if not self._root.exists():

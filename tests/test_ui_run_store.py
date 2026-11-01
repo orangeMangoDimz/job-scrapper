@@ -107,6 +107,47 @@ def test_mark_interrupted_closes_running_runs(tmp_path: Path):
     assert store.get(record.id).status is RunStatus.INTERRUPTED
 
 
+def _corrupt_record(tmp_path: Path, run_id: str) -> None:
+    (tmp_path / "ui-runs" / run_id / "run.json").write_text("{broken")
+
+
+def test_list_recent_skips_unreadable_record(tmp_path: Path):
+    store = _store(tmp_path)
+    good = store.create(("a",), ("upwork",))
+    bad = store.create(("b",), ("upwork",))
+    _corrupt_record(tmp_path, bad.id)
+
+    assert [record.id for record in store.list_recent()] == [good.id]
+
+
+def test_mark_interrupted_survives_unreadable_record(tmp_path: Path):
+    store = _store(tmp_path)
+    good = store.create(("a",), ("upwork",))
+    bad = store.create(("b",), ("upwork",))
+    _corrupt_record(tmp_path, bad.id)
+
+    store.mark_interrupted()
+
+    assert store.get(good.id).status is RunStatus.INTERRUPTED
+
+
+def test_get_treats_unreadable_record_as_missing(tmp_path: Path):
+    store = _store(tmp_path)
+    record = store.create(("a",), ("upwork",))
+    (tmp_path / "ui-runs" / record.id / "run.json").write_text("{}")
+
+    with pytest.raises(RunNotFoundError):
+        store.get(record.id)
+
+
+def test_read_result_treats_unreadable_result_as_empty(tmp_path: Path):
+    store = _store(tmp_path)
+    record = store.create(("a",), ("upwork",))
+    (tmp_path / "ui-runs" / record.id / "result.json").write_text("{broken")
+
+    assert store.read_result(record.id) == {}
+
+
 def test_flatten_result_returns_jobs_and_failures():
     jobs, failures = flatten_result(_result(False, 1))
 
