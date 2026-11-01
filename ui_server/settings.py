@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal, Self
+
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+MIN_SESSION_SECRET_LENGTH = 32
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="UI_", frozen=True)
+
+    env: Literal["dev", "prod"] = "dev"
+    host: str = "0.0.0.0"
+    port: int = 8090
+    mcp_url: str = "http://scraper-mcp:8080/mcp"
+    runs_dir: Path = Path("output/ui-runs")
+    log_path: Path = Path("logs/scraper.log")
+    config_path: Path = Path("config.yaml")
+    dev_patch_path: Path = Path("config.dev.patch.yaml")
+    dev_merged_path: Path = Path("config.dev.yaml")
+    backup_dir: Path = Path("config-backups")
+    static_dir: Path = Path("ui/dist")
+    password_hash: str = ""
+    session_secret: str = ""
+    keep_runs: int = 50
+
+    @model_validator(mode="after")
+    def require_prod_secrets(self) -> Self:
+        if self.env != "prod":
+            return self
+        if not self.password_hash:
+            raise ValueError("UI_PASSWORD_HASH is required in prod")
+        if len(self.session_secret) < MIN_SESSION_SECRET_LENGTH:
+            raise ValueError(
+                f"UI_SESSION_SECRET must have at least {MIN_SESSION_SECRET_LENGTH} characters"
+            )
+        return self
+
+    @property
+    def auth_enabled(self) -> bool:
+        return self.env == "prod"
+
+    @property
+    def config_read_only(self) -> bool:
+        return self.env == "prod"
+
+    @property
+    def cookie_secure(self) -> bool:
+        return self.env == "prod"
