@@ -1,6 +1,6 @@
 # Filter options
 
-The `filter:` block in `config.yaml` drops jobs from the output before they
+The `filter` job setting drops jobs from the output before they
 reach the JSON files. It runs after the recency filter (`max_age_hours`) and
 before fields are projected for output.
 

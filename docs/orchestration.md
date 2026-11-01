@@ -16,7 +16,7 @@ prompt and a different MCP backend.
 │  scraper-bot container               │         │   scraper-mcp        │
 │  (long-running, Claude image)        │         │   long-running       │
 │                                      │  MCP    │   HTTP :8080         │
-│   supercronic ─→ run-scraper.sh      │ ──────► │   reads config.yaml  │
+│   supercronic ─→ run-scraper.sh      │ ──────► │   reads Mongo        │
 │        │                             │         │   runs scrape        │
 │        ▼                             │         │   returns aggregated │
 │   claude -p "$(cat prompts/...)"     │ ◄────── │   JSON               │

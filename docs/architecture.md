@@ -9,7 +9,9 @@ config edits that touch unfamiliar areas, or when adding a new site.
 scraper/                    # CLI + library
 ├── __main__.py             # `python -m scraper [--config PATH] [--keyword KW] [sites...]`
 ├── runner.py               # orchestrates (keyword, site) pairs through a thread pool
-├── config_loader.py        # YAML → AppConfig dataclass + validation
+├── config_loader.py        # settings dict → AppConfig dataclass + validation
+├── job_settings.py         # JobSettingsStore: Mongo job settings, versions, history
+├── seed_settings.py        # seeds Mongo from seeds/job_settings.yaml
 ├── types.py                # canonical Job TypedDict + CANONICAL_FIELDS
 ├── config.py               # static constants (USER_AGENT, CHALLENGE_MARKERS, etc.)
 ├── fetchers/               # HTTP layer
@@ -27,17 +29,17 @@ scraper/                    # CLI + library
     └── indeed.py
 
 mcp_server/                 # MCP HTTP server
-├── server.py               # FastMCP, tools: list_sites, get_config, update_config, get_scrape_status, test_proxy_connection, scrape_jobs
+├── server.py               # FastMCP, tools: list_sites, get_config, update_config, get_config_history, restore_config, get_scrape_status, test_proxy_connection, scrape_jobs
 └── __init__.py             # (empty)
 ```
 
 ## Request flow (per scrape run)
 
 ```
-config.yaml
+config.yaml   seeds/job_settings.yaml → Mongo `job_settings`
    │
    ▼
-config_loader.load()   →   AppConfig (immutable dataclass)
+load_app_config()   →   AppConfig (immutable dataclass)
    │
    ▼
 runner.run(config, targets, keywords)
@@ -97,7 +99,7 @@ fetching:
 | `{keyword_plus}`  | plus-separated                  |
 
 Resolution happens in `SiteConfig.url_for(keyword)`. Validation runs at
-config load time (`load()` formats with a sample keyword and rejects
+config load time (`parse()` formats with a sample keyword and rejects
 unknown placeholders) so a bad template fails loudly on startup, not
 mid-scrape.
 
@@ -132,19 +134,19 @@ were in `fields` (plus the always-on anchors).
 ## MCP layer relationship
 
 `mcp_server/server.py` is a thin shell over `scraper.runner.run` and
-`scraper.config_loader.load`. It does no business logic of its own — every
+`scraper.job_settings.load_app_config`. It does no business logic of its own — every
 tool delegates to the same code paths the CLI uses, so MCP behavior
 matches `python -m scraper` exactly.
 
-`update_config` is the only mutating tool. It validates by running the
-patched config through `config_loader.load()` against a temp file, then
-atomically replaces the live file. See [`mcp.md`](mcp.md) for tool details.
+`update_config` and `restore_config` are the mutating tools. Both validate
+with the same parser (`config_loader.parse`) before writing to Mongo.
+See [`mcp.md`](mcp.md) for tool details.
 
 ## Where extension lives
 
 | Want to add… | Touch |
 |--------------|-------|
-| A new site | `scraper/sites/<name>.py` + register in `sites/__init__.py::SCRAPERS`; add `sites.<name>` entry to `config.yaml` |
+| A new site | `scraper/sites/<name>.py` + register in `sites/__init__.py::SCRAPERS`; add the `sites.<name>` entry to `seeds/job_settings.yaml` and to each environment with `update_config` |
 | A new canonical field | `scraper/types.py` (Job + CANONICAL_FIELDS), per-site parsers fill it, optionally update `default_fields` |
 | A new fetcher (e.g. proxy, undetected-chromedriver) | `scraper/fetchers/<name>.py`; insert into `runner.default_fetch_chain()` |
 | A new MCP tool | `mcp_server/server.py`; mark with `@mcp.tool()` |
