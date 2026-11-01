@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from ui_server.errors import McpUnavailableError
+from ui_server.errors import ConfigConflictError, ConfigInvalidError, McpUnavailableError
 from ui_server.services.mcp_gateway import ScraperClient, read_structured
 
 
@@ -87,3 +87,58 @@ def test_scrape_jobs_sends_sites_and_keywords_without_saving_the_run():
     assert gateway.calls == [
         ("scrape_jobs", {"sites": ["upwork"], "keywords": ["django"], "save_run": False})
     ]
+
+
+def test_save_config_sends_patch_version_and_source():
+    gateway = FakeGateway()
+    gateway.responses = [{"ok": True, "version": 2}]
+
+    asyncio.run(ScraperClient(gateway).save_config({"limit": 9}, 1))
+
+    assert gateway.calls == [
+        ("update_config", {"patch": {"limit": 9}, "expected_version": 1, "source": "ui"})
+    ]
+
+
+def test_save_config_raises_on_conflict():
+    gateway = FakeGateway()
+    gateway.responses = [{"ok": False, "reason": "conflict", "message": "changed"}]
+
+    with pytest.raises(ConfigConflictError, match="changed"):
+        asyncio.run(ScraperClient(gateway).save_config({"limit": 9}, 1))
+
+
+def test_save_config_raises_on_invalid_settings():
+    gateway = FakeGateway()
+    gateway.responses = [{"ok": False, "reason": "invalid", "message": "bad limit"}]
+
+    with pytest.raises(ConfigInvalidError, match="bad limit"):
+        asyncio.run(ScraperClient(gateway).save_config({"limit": 9}, 1))
+
+
+def test_save_config_raises_when_store_is_down():
+    gateway = FakeGateway()
+    gateway.responses = [{"ok": False, "reason": "unavailable", "message": "down"}]
+
+    with pytest.raises(McpUnavailableError, match="down"):
+        asyncio.run(ScraperClient(gateway).save_config({"limit": 9}, 1))
+
+
+def test_restore_config_sends_versions_and_source():
+    gateway = FakeGateway()
+    gateway.responses = [{"ok": True, "version": 3}]
+
+    asyncio.run(ScraperClient(gateway).restore_config(1, 2))
+
+    assert gateway.calls == [
+        ("restore_config", {"version": 1, "expected_version": 2, "source": "ui"})
+    ]
+
+
+def test_read_config_history_returns_entries():
+    gateway = FakeGateway()
+    gateway.responses = [{"entries": [{"version": 1}]}]
+
+    entries = asyncio.run(ScraperClient(gateway).read_config_history())
+
+    assert entries == [{"version": 1}]

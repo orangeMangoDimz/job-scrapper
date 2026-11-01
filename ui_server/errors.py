@@ -36,6 +36,11 @@ class CrossSiteRequestError(AppError):
     default_message = "Cross-site requests are not allowed."
 
 
+class ConfigConflictError(AppError):
+    status_code = 409
+    default_message = "These settings changed somewhere else. Reload and try again."
+
+
 class ConfigReadOnlyError(AppError):
     status_code = 403
     default_message = "Config is read-only here. Change it through git and deploy."
