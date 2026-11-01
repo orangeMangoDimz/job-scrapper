@@ -8,7 +8,7 @@ export class SaveConfigUseCase {
     this.repository = repository
   }
 
-  execute(changes: ConfigChanges): Promise<void> {
-    return this.repository.saveConfig(changes)
+  execute(changes: ConfigChanges, version: number): Promise<void> {
+    return this.repository.saveConfig(changes, version)
   }
 }
