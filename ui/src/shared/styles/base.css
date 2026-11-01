@@ -1,0 +1,57 @@
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    border-color: var(--line);
+  }
+
+  ::selection {
+    background-color: var(--selection);
+    color: var(--ink);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .lucide {
+    stroke-width: 1.5;
+  }
+
+  @media (pointer: coarse), (max-width: 767.98px) {
+    input,
+    textarea,
+    select,
+    [contenteditable]:not([contenteditable='false'], .paper-scope *) {
+      --text-body: var(--text-field-min);
+      --text-body-sm: var(--text-field-min);
+      --text-body-sm--line-height: var(--text-body--line-height);
+      --text-caption: var(--text-field-min);
+      --text-caption--line-height: var(--text-body--line-height);
+      --text-code: var(--text-field-min);
+      font-size: var(--text-field-min);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
