@@ -27,7 +27,7 @@ Both also tagged as `:mcp-latest` / `:bot-latest`.
 3. **build-ui** — build `ui-server` Dockerfile target → push (parallel with build-mcp)
 4. **deploy-mcp** — SSH, `docker pull` + replace `scraper-mcp` container
 5. **deploy-bot** — SSH, `docker pull` + replace `scraper-bot` container with secrets injected
-6. **deploy-ui** — SSH, `docker pull` + replace `scraper-ui` and start Caddy
+6. **deploy-ui** — SSH, `docker pull` + replace `scraper-ui` and start Caddy. Skipped when the `UI_DOMAIN` variable is not set
 
 deploy-bot runs after deploy-mcp so the MCP server is up before the bot
 starts cron-firing. deploy-ui runs last, so two deploys never touch the
@@ -44,8 +44,8 @@ Repo → Settings → Secrets and variables → Actions → **Secrets** tab.
 | `SSH_PRIVATE_KEY` | all deploy jobs | private key for VPS SSH |
 | `DISCORD_BOT_TOKEN` | deploy-bot | Discord application bot token (with Send Messages perm in target channel) |
 | `DISCORD_CHANNEL_ID` | deploy-bot | Discord channel ID where job posts go |
-| `UI_PASSWORD_HASH` | deploy-ui | Argon2 hash of the UI password, see `.env.example` |
-| `UI_SESSION_SECRET` | deploy-ui | Random string, at least 32 characters, see `.env.example` |
+| `UI_PASSWORD_HASH` | deploy-ui | Required when `UI_DOMAIN` is set. Argon2 hash of the UI password, see `.env.example` |
+| `UI_SESSION_SECRET` | deploy-ui | Required when `UI_DOMAIN` is set. Random string, at least 32 characters, see `.env.example` |
 
 `GITHUB_TOKEN` is auto-provided — used to push to ghcr.io.
 
@@ -58,7 +58,7 @@ anyone with read access). Use these for non-secret config:
 |---|---|---|
 | `CLAUDE_CONFIG_DIR` | deploy-bot | `/home/ubuntu/.claude` (host path mounted into bot for Claude session auth) |
 | `CLAUDE_CONFIG_FILE` | deploy-bot | `/home/ubuntu/.claude.json` (host file mounted into bot) |
-| `UI_DOMAIN` | deploy-ui | Public domain for the UI, with DNS pointing to the VPS |
+| `UI_DOMAIN` | deploy-ui | Optional. Public domain for the UI, with DNS pointing to the VPS. When it is not set, deploy-ui is skipped and the UI stays offline |
 | `MCP_BIND_HOST` | all deploy jobs | Optional. Docker gateway IP of the VPS, default `172.17.0.1` |
 | `SCRAPER_PROXY_URL` | `deploy-mcp` | Required. Proxy URL for scrapes, such as `socks5://localhost:1080`. A URL with a password belongs in a secret of the same name, because variables are visible in logs. The deploy fails when it is missing or empty |
 
@@ -107,8 +107,9 @@ scraper-mcp listens on the Docker gateway address (`MCP_BIND_HOST`, default
 which would cut off the bot.
 
 scraper-ui has no published port. Caddy is its only public entry, on ports 80 and
-443. Required before the first deploy: `UI_PASSWORD_HASH` and `UI_SESSION_SECRET`
-secrets, a `UI_DOMAIN` variable, and a DNS record pointing to the VPS.
+443. The UI is optional: deploy-ui runs only when the `UI_DOMAIN` variable is set.
+Required before you set it: `UI_PASSWORD_HASH` and `UI_SESSION_SECRET` secrets,
+and a DNS record pointing to the VPS.
 
 ## ghcr.io image visibility
 

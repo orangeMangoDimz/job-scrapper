@@ -250,6 +250,7 @@ jobs:
   # 5. SSH into VPS → pull new UI image → restart UI and Caddy (runs after build-ui + deploy-bot)
   deploy-ui:
     needs: [build-ui, deploy-bot]
+    if: ${{ vars.UI_DOMAIN != '' }} # no domain means no public UI, so skip it
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
