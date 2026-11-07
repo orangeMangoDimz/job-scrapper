@@ -4,6 +4,7 @@ import { toast } from 'vue-sonner'
 import { toOptionalNumber, type SiteSetting } from '@/modules/config/domain/entities/ScraperConfig'
 import ConfigHistory from '@/modules/config/presentation/components/ConfigHistory.vue'
 import FilterFields from '@/modules/config/presentation/components/FilterFields.vue'
+import JobFieldsInput from '@/modules/config/presentation/components/JobFieldsInput.vue'
 import ListInput from '@/modules/config/presentation/components/ListInput.vue'
 import SiteSettings from '@/modules/config/presentation/components/SiteSettings.vue'
 import { useConfigStore } from '@/modules/config/presentation/stores/useConfigStore'
@@ -20,6 +21,8 @@ const isStale = computed(() => store.snapshot?.isStale ?? true)
 const enabledSiteCount = computed(
   () => store.values?.sites.filter((site) => site.isEnabled).length ?? 0,
 )
+const jobFields = computed(() => store.snapshot?.jobFields ?? [])
+const mandatoryFields = computed(() => store.snapshot?.mandatoryFields ?? [])
 const savedAt = computed(() =>
   store.snapshot === null ? '' : new Date(store.snapshot.updatedAt).toLocaleString(),
 )
@@ -127,11 +130,17 @@ onMounted(() => {
           <FilterFields id-prefix="global" v-model="store.values.filter" />
         </PageSection>
 
-        <PageSection title="Job fields" description="Fields saved for each job">
-          <div class="flex flex-col gap-2">
-            <Label for="default-fields">Job fields, separated by commas</Label>
-            <ListInput id="default-fields" v-model="store.values.defaultFields" />
-          </div>
+        <PageSection
+          title="Job fields"
+          description="Pick the fields saved for each job. Locked fields are always saved"
+        >
+          <JobFieldsInput
+            id-prefix="default"
+            legend="Job fields"
+            v-model="store.values.defaultFields"
+            :job-fields="jobFields"
+            :mandatory-fields="mandatoryFields"
+          />
         </PageSection>
 
         <PageSection
@@ -144,6 +153,8 @@ onMounted(() => {
               :key="site.name"
               :site="site"
               :default-fields="store.values.defaultFields"
+              :job-fields="jobFields"
+              :mandatory-fields="mandatoryFields"
               @update="updateSite"
             />
           </div>
@@ -154,7 +165,7 @@ onMounted(() => {
 
       <div
         data-slot="save-bar"
-        class="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-surface px-4 py-3 md:mx-0 md:rounded-lg md:border"
+        class="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center justify-end gap-3 bg-surface px-4 py-3 md:mx-0"
       >
         <p v-if="store.saveError" role="alert" class="mr-auto text-body-sm text-danger">
           {{ store.saveError }}

@@ -91,9 +91,14 @@ Read-only. Returns the job settings from Mongo, with their version.
     "max_age_hours": 24,
     "filter": {"location": ["jakarta"]},
     "sites": {}
-  }
+  },
+  "job_fields": ["site", "matched_keyword", "title", "..."],
+  "mandatory_fields": ["site", "matched_keyword", "title", "company", "url"]
 }
 ```
+
+- `job_fields`: every field name `default_fields` and `sites.<name>.fields` accept, in scraper order
+- `mandatory_fields`: fields saved for every job whatever the settings say
 
 Returns `{"error": "..."}` when Mongo is down or the document is missing.
 
@@ -136,7 +141,7 @@ Write. Applies a patch to the job settings, validates the result, and keeps the 
 - `expected_version`: optional. The version you read. A mismatch saves nothing
 - `source`: `ui` or `mcp`. Kept with the version
 
-Only job setting keys are allowed. `proxy` and `concurrency` are refused.
+Only job setting keys are allowed. `proxy` and `concurrency` are refused. Field names in `default_fields` or `sites.<name>.fields` that are not in `get_config`'s `job_fields` are refused with reason `invalid`.
 
 **Returns** (success):
 

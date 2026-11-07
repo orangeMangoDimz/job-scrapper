@@ -112,8 +112,9 @@ job_id              requirements
 
 - `site`, `matched_keyword`, `title`, `company`, `url` are **always
   included** regardless of this list (anchors).
-- Unknown field names log a warning and are silently dropped — they don't
-  abort the load.
+- Unknown field names log a warning and are silently dropped when settings
+  load — they don't abort the load. Saving through `update_config` (and the
+  UI) refuses them instead, so new unknown names never get stored.
 - Per-site override: `sites.<name>.fields` replaces the global list.
 
 ```yaml
@@ -254,7 +255,7 @@ The loader (`parse`) enforces:
 | `max_age_hours`           | Integer >= 1 or null                             | `ConfigError`     |
 | `sites`                   | Non-empty mapping                                | `ConfigError`     |
 | `sites.<name>.url_template` | Non-empty string with valid placeholders only  | `ConfigError`     |
-| `default_fields` entries  | Strings; unknown names → warning, dropped       | `[config] warning` (load continues) |
+| `default_fields` entries  | Strings; unknown names → warning, dropped on load, refused on save | `[config] warning` (load continues) |
 | `filter` keys             | One of `location`, `employment_type`, `work_type`; unknown → warning, dropped | `[config] warning` |
 | `filter` values           | String or list-of-strings                        | `ConfigError`     |
 

@@ -7,6 +7,7 @@ import type {
   SiteChanges,
   SiteSetting,
 } from '@/modules/config/domain/entities/ScraperConfig'
+import { toPickedFields } from '@/modules/config/domain/entities/ScraperConfig'
 
 export interface FilterModel {
   location?: string[]
@@ -44,6 +45,8 @@ export interface ConfigModel {
   updated_at: string
   updated_by: string
   is_stale: boolean
+  job_fields: string[]
+  mandatory_fields: string[]
 }
 
 export interface SiteChangesModel {
@@ -91,32 +94,36 @@ function toApiSetting(model: ApiModel): ApiSetting {
   }
 }
 
-function toSiteSetting(model: SiteModel): SiteSetting {
+function toSiteSetting(model: SiteModel, pickFields: (fields: string[]) => string[]): SiteSetting {
   return {
     name: model.name,
     isEnabled: model.enabled,
     limit: model.limit,
     maxAgeHours: model.max_age_hours,
     filter: model.filter === null ? null : toFilterSetting(model.filter),
-    fields: model.fields,
+    fields: model.fields === null ? null : pickFields(model.fields),
     api: model.api === null ? null : toApiSetting(model.api),
   }
 }
 
 export function toConfigSnapshot(model: ConfigModel): ConfigSnapshot {
+  const pickFields = (fields: string[]): string[] =>
+    toPickedFields(fields, model.job_fields, model.mandatory_fields)
   return {
     values: {
       keywords: model.values.keywords,
       limit: model.values.limit,
       maxAgeHours: model.values.max_age_hours,
       filter: toFilterSetting(model.values.filter),
-      defaultFields: model.values.default_fields,
-      sites: model.values.sites.map(toSiteSetting),
+      defaultFields: pickFields(model.values.default_fields),
+      sites: model.values.sites.map((site) => toSiteSetting(site, pickFields)),
     },
     version: model.version,
     updatedAt: model.updated_at,
     updatedBy: model.updated_by,
     isStale: model.is_stale,
+    jobFields: model.job_fields,
+    mandatoryFields: model.mandatory_fields,
   }
 }
 

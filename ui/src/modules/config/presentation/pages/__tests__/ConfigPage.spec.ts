@@ -24,6 +24,8 @@ const SNAPSHOT: ConfigSnapshot = {
   updatedAt: '2026-11-02T01:00:00+00:00',
   updatedBy: 'ui',
   isStale: false,
+  jobFields: ['site', 'title', 'company', 'salary_min', 'company_id'],
+  mandatoryFields: ['site', 'company'],
 }
 
 const VERSION = {

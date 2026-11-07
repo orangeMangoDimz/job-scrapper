@@ -41,6 +41,8 @@ CONFIG = {
             "indeed": {"url_template": "x"},
         },
     },
+    "job_fields": ["site", "title", "salary_min"],
+    "mandatory_fields": ["site", "title"],
 }
 HISTORY = [
     {
@@ -233,6 +235,13 @@ def test_config_read_returns_values_and_version(client: TestClient):
     assert data["is_stale"] is False
     assert data["values"]["filter"] == {"location": ["jakarta"]}
     assert "proxy_url" not in data["values"]
+
+
+def test_config_read_lists_job_fields_and_the_always_saved_ones(client: TestClient):
+    data = client.get("/api/config").json()["data"]
+
+    assert data["job_fields"] == ["site", "title", "salary_min"]
+    assert data["mandatory_fields"] == ["site", "title"]
 
 
 def test_config_read_keeps_site_filter_states_apart(client: TestClient):
