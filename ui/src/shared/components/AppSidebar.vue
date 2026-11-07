@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { ChevronUp, LogOut, PanelLeft, ShieldUser } from '@lucide/vue'
+import { ChevronUp, LogOut, ShieldUser } from '@lucide/vue'
 import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 
 import type { NavGroup } from '@/shared/components/types'
 import AppSidebarItem from '@/shared/components/AppSidebarItem.vue'
-import AppSidebarOpenButton from '@/shared/components/AppSidebarOpenButton.vue'
 import SignOutConfirmDialog from '@/shared/components/SignOutConfirmDialog.vue'
 import ThemeMenuGroup from '@/shared/components/ThemeMenuGroup.vue'
-import { Button } from '@/shared/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,10 +37,8 @@ defineEmits<{
 const isSignOutDialogOpen = ref(false)
 const adminTrigger = ref<InstanceType<typeof DropdownMenuTrigger> | null>(null)
 const adminAnchor = ref<HTMLElement | null>(null)
-const sidebarToggle = ref<InstanceType<typeof Button> | null>(null)
-const sidebarOpenButton = ref<InstanceType<typeof AppSidebarOpenButton> | null>(null)
 const themeAnnouncement = ref('')
-const { isMobile, state, toggleSidebar } = useSidebar()
+const { isMobile, state } = useSidebar()
 
 const isHidden = computed(() => !isMobile.value && state.value === 'collapsed')
 
@@ -57,18 +53,6 @@ watch(isSignOutDialogOpen, (isOpen) => {
   }
 })
 
-async function collapseSidebar(): Promise<void> {
-  toggleSidebar()
-  await nextTick()
-  focusButton(sidebarOpenButton.value)
-}
-
-async function expandSidebar(): Promise<void> {
-  toggleSidebar()
-  await nextTick()
-  focusButton(sidebarToggle.value)
-}
-
 function announceTheme(mode: ThemeMode): void {
   themeAnnouncement.value = `Theme changed to ${THEME_MODE_LABELS[mode]}`
 }
@@ -81,7 +65,6 @@ function requestSignOut(): void {
 </script>
 
 <template>
-  <AppSidebarOpenButton v-if="isHidden" ref="sidebarOpenButton" @click="expandSidebar" />
   <Sidebar collapsible="offcanvas" :inert="isHidden || undefined">
     <SidebarHeader class="flex-row items-center gap-0">
       <span
@@ -89,19 +72,6 @@ function requestSignOut(): void {
       >
         NoNo Scraper
       </span>
-      <Button
-        v-if="!isMobile"
-        ref="sidebarToggle"
-        data-slot="sidebar-toggle"
-        variant="ghost"
-        size="icon"
-        class="size-11 shrink-0 text-ink-muted hover:bg-surface hover:text-ink"
-        aria-expanded="true"
-        @click="collapseSidebar"
-      >
-        <PanelLeft aria-hidden="true" />
-        <span class="sr-only">Collapse sidebar</span>
-      </Button>
     </SidebarHeader>
 
     <SidebarContent as="nav" aria-label="Main">

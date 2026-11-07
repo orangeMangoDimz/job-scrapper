@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SidebarToggle from '@/shared/components/SidebarToggle.vue'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/shared/components/ui/sidebar'
 </script>
 
@@ -13,7 +14,8 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/shared/componen
         <span class="text-subheading font-bold text-ink">NoNo Scraper</span>
       </div>
       <SidebarInset class="px-4 pt-4 pb-12 md:px-12 md:pt-8 md:pb-16">
-        <div class="mx-auto flex w-full max-w-content flex-1 flex-col gap-6">
+        <div class="relative mx-auto flex w-full max-w-content flex-1 flex-col gap-6">
+          <SidebarToggle class="absolute top-0 -left-12 max-md:hidden" />
           <slot />
         </div>
       </SidebarInset>
