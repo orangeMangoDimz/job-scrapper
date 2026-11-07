@@ -47,7 +47,7 @@ function changeDelayMax(value: string | number): void {
 </script>
 
 <template>
-  <div class="flex flex-col gap-2 border-b border-line-strong pb-3">
+  <div class="flex flex-col gap-2 rounded-md border border-line p-4">
     <div class="flex items-center gap-3">
       <Checkbox
         :id="`config-site-${site.name}`"
