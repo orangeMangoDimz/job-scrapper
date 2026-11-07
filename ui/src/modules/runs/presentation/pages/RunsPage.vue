@@ -7,15 +7,17 @@ import RunResults from '@/modules/runs/presentation/components/RunResults.vue'
 import { formatJobCount } from '@/modules/runs/presentation/components/runStatus'
 import { useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
 import OutlineNav from '@/shared/components/OutlineNav.vue'
-import PageLoadState from '@/shared/components/PageLoadState.vue'
 import PageSection from '@/shared/components/PageSection.vue'
 import type { OutlineItem } from '@/shared/components/types'
+import { Button } from '@/shared/components/ui/button'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 
 const OUTLINE_KEY_ATTRIBUTE = 'data-outline-key'
 
 const store = useRunStore()
-const isLoading = computed(() => store.status === 'idle' || store.status === 'loading')
+const isPending = computed(() => store.status === 'idle' || store.status === 'loading')
+const isFirstLoad = computed(() => isPending.value && store.options === null)
+const showsHistory = computed(() => store.options !== null || isFirstLoad.value)
 const selectedId = computed(() => store.selected?.record.id ?? null)
 
 const outline = computed<OutlineItem[]>(() => [
@@ -31,13 +33,17 @@ const outline = computed<OutlineItem[]>(() => [
         },
       ]
     : []),
-  {
-    key: 'history',
-    label: 'History',
-    badge: null,
-    isMuted: store.runs.length === 0,
-    entries: [],
-  },
+  ...(showsHistory.value
+    ? [
+        {
+          key: 'history',
+          label: 'History',
+          badge: null,
+          isMuted: store.runs.length === 0,
+          entries: [],
+        },
+      ]
+    : []),
 ])
 
 onMounted(() => void store.load())
@@ -49,17 +55,7 @@ onBeforeUnmount(() => store.stopPolling())
     <h1 class="min-w-0 text-title text-ink">Runs</h1>
   </header>
 
-  <PageLoadState
-    v-if="store.status === 'error'"
-    is-error
-    loading-label="Loading runs"
-    error-title="Could not load runs"
-    :error-message="store.errorMessage"
-    @retry="store.load"
-  />
-
   <div
-    v-else
     class="flex flex-col gap-6 md:gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start xl:gap-6"
   >
     <div class="flex min-w-0 flex-col gap-6 md:gap-4">
@@ -76,7 +72,20 @@ onBeforeUnmount(() => store.stopPolling())
         title="Start a run"
         description="Pick keywords and sites, then scrape them now"
       >
-        <div v-if="isLoading" role="status" aria-busy="true" class="flex flex-col gap-4">
+        <div
+          v-if="store.status === 'error'"
+          role="alert"
+          class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line-strong p-4"
+        >
+          <div class="flex min-w-0 flex-col">
+            <p class="text-body font-semibold text-ink">Could not load runs</p>
+            <p v-if="store.errorMessage" class="text-body-sm text-ink-muted">
+              {{ store.errorMessage }}
+            </p>
+          </div>
+          <Button size="sm" @click="store.load">Try again</Button>
+        </div>
+        <div v-if="isFirstLoad" role="status" aria-busy="true" class="flex flex-col gap-4">
           <span class="sr-only">Loading run options</span>
           <Skeleton class="h-10 w-full" />
           <Skeleton class="h-6 w-2/3" />
@@ -102,11 +111,12 @@ onBeforeUnmount(() => store.stopPolling())
       />
 
       <PageSection
+        v-if="showsHistory"
         :[OUTLINE_KEY_ATTRIBUTE]="'history'"
         title="History"
         description="Pick a run to see its results"
       >
-        <div v-if="isLoading" role="status" aria-busy="true" class="flex flex-col gap-4 md:gap-3">
+        <div v-if="isFirstLoad" role="status" aria-busy="true" class="flex flex-col gap-4 md:gap-3">
           <span class="sr-only">Loading run history</span>
           <Skeleton v-for="index in 3" :key="index" class="h-24 w-full rounded-md" />
         </div>

@@ -28,7 +28,6 @@ const OUTLINE: OutlineItem[] = [
 
 const store = useConfigStore()
 const isStale = computed(() => store.snapshot?.isStale ?? true)
-const isLoading = computed(() => store.status === 'idle' || store.status === 'loading')
 const enabledSiteCount = computed(
   () => store.values?.sites.filter((site) => site.isEnabled).length ?? 0,
 )
@@ -66,7 +65,7 @@ onMounted(() => {
   </header>
 
   <PageLoadState
-    v-if="isLoading || store.status === 'error'"
+    v-if="store.values === null"
     :is-error="store.status === 'error'"
     loading-label="Loading config"
     error-title="Could not load config"
@@ -82,10 +81,20 @@ onMounted(() => {
   </PageLoadState>
 
   <div
-    v-else-if="store.values"
+    v-else
     class="flex flex-col gap-6 md:gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start xl:gap-6"
   >
     <div class="flex min-w-0 flex-col gap-6 md:gap-4">
+      <div
+        v-if="store.status === 'error'"
+        role="alert"
+        class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line-strong p-4"
+      >
+        <p class="text-body-sm text-ink">
+          Could not refresh the config, so it may be out of date. {{ store.errorMessage }}
+        </p>
+        <Button size="sm" @click="store.load">Try again</Button>
+      </div>
       <p
         v-if="isStale"
         role="status"
