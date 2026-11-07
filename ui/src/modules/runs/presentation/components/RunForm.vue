@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Play } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import type { RunOptions } from '@/modules/runs/domain/entities/Run'
 import { Button } from '@/shared/components/ui/button'
@@ -42,20 +43,25 @@ function setSite(name: string, isPicked: boolean | 'indeterminate'): void {
       <Input id="keywords" v-model="keywordText" />
     </div>
     <fieldset class="flex flex-col gap-2">
-      <legend class="text-body-sm font-semibold">Sites</legend>
-      <div class="flex flex-wrap gap-4">
-        <div v-for="site in options.sites" :key="site.name" class="flex items-center gap-2">
+      <legend class="mb-2 text-body-sm font-semibold text-ink">Sites</legend>
+      <div class="flex flex-wrap gap-2">
+        <div
+          v-for="site in options.sites"
+          :key="site.name"
+          class="flex items-center gap-2 rounded-md border border-line px-3 py-2 transition-[border-color,background-color] duration-200 ease-out has-data-[state=checked]:border-accent has-data-[state=checked]:bg-accent-soft"
+        >
           <Checkbox
             :id="`site-${site.name}`"
             :model-value="pickedSites.includes(site.name)"
             @update:model-value="setSite(site.name, $event)"
           />
-          <Label :for="`site-${site.name}`">{{ site.name }}</Label>
+          <Label :for="`site-${site.name}`" class="cursor-pointer">{{ site.name }}</Label>
         </div>
       </div>
     </fieldset>
     <div>
-      <Button type="submit" :disabled="!canStart">
+      <Button type="submit" variant="primary" :disabled="!canStart">
+        <Play aria-hidden="true" />
         {{ isRunning ? 'Scrape running' : 'Run scrape' }}
       </Button>
     </div>

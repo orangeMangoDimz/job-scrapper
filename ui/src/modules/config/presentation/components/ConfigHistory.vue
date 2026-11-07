@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { useConfigStore } from '@/modules/config/presentation/stores/useConfigStore'
+import EmptyState from '@/shared/components/EmptyState.vue'
+import PageSection from '@/shared/components/PageSection.vue'
 import { Button } from '@/shared/components/ui/button'
 
 const RESTORED_MESSAGE = 'Version restored'
@@ -23,20 +25,24 @@ async function confirmRestore(version: number): Promise<void> {
 </script>
 
 <template>
-  <section aria-labelledby="config-history-title" class="flex flex-col gap-3">
-    <h2 id="config-history-title" class="text-body-sm font-semibold">Older versions</h2>
-    <p v-if="store.historyError" role="alert" class="text-body-sm">{{ store.historyError }}</p>
-    <p v-else-if="store.history.length === 0" class="text-body-sm text-ink-muted">
-      No older versions yet
+  <PageSection title="Older versions" description="Restore an earlier config">
+    <p v-if="store.historyError" role="alert" class="text-body-sm text-danger">
+      {{ store.historyError }}
     </p>
-    <ul v-else class="flex flex-col gap-3">
+    <EmptyState
+      v-else-if="store.history.length === 0"
+      compact
+      title="No older versions yet."
+      hint="Each save keeps the previous version here."
+    />
+    <ul v-else class="flex flex-col gap-4 md:gap-3">
       <li
         v-for="entry in store.history"
         :key="entry.version"
-        class="flex flex-wrap items-center justify-between gap-3 border-b border-line-strong pb-3"
+        class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line p-4"
       >
         <div class="flex min-w-0 flex-col">
-          <span class="text-body-sm font-semibold">
+          <span class="text-body-sm font-semibold text-ink">
             Version {{ entry.version }}, {{ toLocalTime(entry.updatedAt) }}, by
             {{ entry.updatedBy }}
           </span>
@@ -60,5 +66,5 @@ async function confirmRestore(version: number): Promise<void> {
         </Button>
       </li>
     </ul>
-  </section>
+  </PageSection>
 </template>

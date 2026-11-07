@@ -99,6 +99,13 @@
   box-shadow: var(--focus-ring);
 }
 
+@utility focus-ring-tight {
+  outline: none;
+  box-shadow: 0 0 0 calc(2px / var(--paper-fit, 1) - 1px) var(--paper-accent);
+}
+
+/* Buttons: colours ease on hover and the button shrinks a little while held,
+   so a click feels physical. Disabled buttons do not move. */
 @utility press {
   transition-property: color, background-color, border-color, scale;
   transition-duration: 150ms;
@@ -121,6 +128,8 @@
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 
+/* Sidebar rail: content fades and is clipped while the width animates, never
+   toggled with display, so the icons do not jump mid-animation. */
 @utility sidebar-fade {
   white-space: nowrap;
   transition: opacity 150ms ease-out 80ms;
@@ -132,6 +141,8 @@
   }
 }
 
+/* Sidebar rail: content that has no place on the rail folds its height away
+   with the width animation instead of disappearing at once. */
 @utility sidebar-collapse {
   display: grid;
   grid-template-rows: 1fr;
@@ -146,6 +157,7 @@
     overflow: hidden;
   }
 
+  /* Hidden from assistive tech once folded, as display: none was before. */
   [data-collapsible='icon'] & {
     grid-template-rows: 0fr;
     opacity: 0;
@@ -240,6 +252,12 @@
   animation-name: var(--highlight-animation, none), var(--underline-animation, none);
   animation-duration: 150ms;
   animation-timing-function: ease-out;
+}
+
+@utility paper-control {
+  @media (pointer: coarse) {
+    scale: calc(1 / var(--paper-fit, 1));
+  }
 }
 
 @utility paper-scope {
