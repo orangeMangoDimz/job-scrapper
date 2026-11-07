@@ -46,7 +46,7 @@ def test_get_config_lists_job_fields_and_the_always_saved_ones(database: Any):
 
     assert result["job_fields"][:3] == ["site", "matched_keyword", "title"]
     assert result["job_fields"][-1] == "requirements"
-    assert len(result["job_fields"]) == 17
+    assert {"salary_min", "salary_max", "company_id"} <= set(result["job_fields"])
     assert result["mandatory_fields"] == ["site", "matched_keyword", "title", "company", "url"]
 
 

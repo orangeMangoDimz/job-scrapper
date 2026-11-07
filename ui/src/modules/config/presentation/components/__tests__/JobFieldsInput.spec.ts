@@ -6,13 +6,13 @@ import JobFieldsInput from '@/modules/config/presentation/components/JobFieldsIn
 const JOB_FIELDS = ['site', 'title', 'company_id', 'salary_min', 'salary_max']
 const MANDATORY_FIELDS = ['site', 'title']
 
-function mountInput(modelValue: string[]) {
+function mountInput(modelValue: string[], jobFields: string[] = JOB_FIELDS) {
   return mount(JobFieldsInput, {
     props: {
       idPrefix: 'global',
       legend: 'Job fields',
       modelValue,
-      jobFields: JOB_FIELDS,
+      jobFields,
       mandatoryFields: MANDATORY_FIELDS,
     },
     attachTo: document.body,
@@ -76,5 +76,12 @@ describe('JobFieldsInput', () => {
     await flushPromises()
 
     expect(wrapper.emitted('update:modelValue')).toEqual([[['company_id']]])
+  })
+
+  it('says the field list is missing instead of showing an empty grid', () => {
+    const wrapper = mountInput(['salary_max'], [])
+
+    expect(wrapper.find('[data-slot="checkbox"]').exists()).toBe(false)
+    expect(wrapper.get('[data-slot="empty-state"]').text()).toContain('No job field list')
   })
 })

@@ -99,7 +99,8 @@ max_age_hours: 24
 ### `default_fields` (optional)
 
 List of canonical field names to emit per Job. Default:
-`[title, company, location, url]`.
+`[title, company, location, url]`. An empty list (`[]`) keeps only the
+always-included anchors below.
 
 Allowed canonical fields:
 

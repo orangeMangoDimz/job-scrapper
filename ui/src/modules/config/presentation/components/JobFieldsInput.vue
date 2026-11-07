@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { toJobFieldLabel } from '@/modules/config/domain/entities/ScraperConfig'
+import EmptyState from '@/shared/components/EmptyState.vue'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Label } from '@/shared/components/ui/label'
 
@@ -38,7 +39,13 @@ function setField(field: string, isChecked: boolean | 'indeterminate'): void {
 </script>
 
 <template>
-  <fieldset class="min-w-0 border-0 p-0">
+  <EmptyState
+    v-if="jobFields.length === 0"
+    compact
+    title="No job field list from the scraper."
+    hint="Update the scraper to the same version as this page, then reload."
+  />
+  <fieldset v-else class="min-w-0 border-0 p-0">
     <legend class="sr-only">{{ legend }}</legend>
     <div class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
       <div v-for="field in jobFields" :key="field" class="flex items-center gap-3">

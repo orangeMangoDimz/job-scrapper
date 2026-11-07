@@ -79,6 +79,18 @@ describe('ConfigPage', () => {
     expect(wrapper.find('form').exists()).toBe(true)
   })
 
+  it('shows the job fields from the scraper as checkboxes', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const labels = wrapper.findAll('fieldset fieldset label').map((label) => label.text())
+    expect(labels).toEqual(['Site', 'Title', 'Company', 'Salary min', 'Company ID'])
+    expect(wrapper.get('#default-field-company').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('#default-field-title').attributes('data-state')).toBe('checked')
+    expect(wrapper.get('#default-field-salary_min').attributes('data-state')).toBe('unchecked')
+  })
+
   it('keeps the form and save bar on screen while a save reloads the config', async () => {
     const reload = deferred<ConfigSnapshot>()
     getConfig.execute.mockResolvedValueOnce(SNAPSHOT).mockReturnValueOnce(reload.promise)
