@@ -12,7 +12,7 @@ const headingId = useId()
 <template>
   <section
     :aria-labelledby="headingId"
-    class="flex scroll-mt-8 flex-col gap-3 rounded-lg border border-line p-4 sm:p-6"
+    class="flex flex-col gap-3 rounded-lg border border-line p-4 sm:p-6"
   >
     <div class="flex items-center justify-between gap-3">
       <div class="flex min-w-0 flex-col">
