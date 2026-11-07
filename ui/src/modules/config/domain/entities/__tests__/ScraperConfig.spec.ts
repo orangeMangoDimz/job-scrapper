@@ -4,6 +4,7 @@ import {
   hasConfigChanges,
   toConfigChanges,
   toDelaySeconds,
+  toJobFieldLabel,
   toOptionalNumber,
   type ConfigValues,
   type SiteSetting,
@@ -100,5 +101,18 @@ describe('toDelaySeconds', () => {
   it('fills a missing value from the other one', () => {
     expect(toDelaySeconds(4, null)).toEqual([4, 4])
     expect(toDelaySeconds(null, 6)).toEqual([6, 6])
+  })
+})
+
+describe('toJobFieldLabel', () => {
+  it.each([
+    ['salary_min', 'Salary min'],
+    ['company_id', 'Company ID'],
+    ['job_id', 'Job ID'],
+    ['matched_keyword', 'Matched keyword'],
+    ['url', 'URL'],
+    ['title', 'Title'],
+  ])('turns %s into %s', (field, label) => {
+    expect(toJobFieldLabel(field)).toBe(label)
   })
 })

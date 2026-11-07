@@ -76,3 +76,21 @@ def test_validate_job_settings_rejects_machine_keys():
 def test_validate_job_settings_rejects_bad_values():
     with pytest.raises(ConfigError, match="'limit' must be >= 1"):
         validate_job_settings({**SETTINGS, "limit": 0})
+
+
+def test_missing_default_fields_use_the_built_in_defaults():
+    fields = parse(SETTINGS, None).fields_for("jobstreet")
+
+    assert fields == {"site", "matched_keyword", "title", "company", "url", "location"}
+
+
+def test_empty_default_fields_keep_only_the_always_saved_fields():
+    fields = parse({**SETTINGS, "default_fields": []}, None).fields_for("jobstreet")
+
+    assert fields == {"site", "matched_keyword", "title", "company", "url"}
+
+
+def test_default_fields_with_only_unknown_names_use_the_built_in_defaults():
+    fields = parse({**SETTINGS, "default_fields": ["old_field"]}, None).fields_for("jobstreet")
+
+    assert "location" in fields

@@ -9,7 +9,7 @@ import {
 } from '@/modules/config/domain/entities/ScraperConfig'
 import FilterFields from '@/modules/config/presentation/components/FilterFields.vue'
 import LineListInput from '@/modules/config/presentation/components/LineListInput.vue'
-import ListInput from '@/modules/config/presentation/components/ListInput.vue'
+import JobFieldsInput from '@/modules/config/presentation/components/JobFieldsInput.vue'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
@@ -19,6 +19,8 @@ const GLOBAL_VALUE_HINT = 'Global'
 const props = defineProps<{
   site: SiteSetting
   defaultFields: string[]
+  jobFields: string[]
+  mandatoryFields: string[]
 }>()
 
 const emit = defineEmits<{
@@ -106,11 +108,13 @@ function changeDelayMax(value: string | number): void {
             />
             <Label :for="`${site.name}-own-fields`">Use its own job fields</Label>
           </div>
-          <ListInput
+          <JobFieldsInput
             v-if="site.fields !== null"
-            :id="`${site.name}-fields`"
-            :aria-label="`${site.name} job fields`"
+            :id-prefix="site.name"
+            :legend="`${site.name} job fields`"
             :model-value="site.fields"
+            :job-fields="jobFields"
+            :mandatory-fields="mandatoryFields"
             @update:model-value="change({ fields: $event })"
           />
         </div>

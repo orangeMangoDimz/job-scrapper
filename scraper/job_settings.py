@@ -20,6 +20,7 @@ from .config_loader import (
     validate_job_settings,
 )
 from .log import get_logger
+from .types import CANONICAL_FIELDS
 
 SETTINGS_COLLECTION = "job_settings"
 HISTORY_COLLECTION = "job_settings_history"
@@ -80,6 +81,34 @@ def _merge_site(current: dict[str, Any], name: str, patch: Any) -> dict[str, Any
     return _apply_fields(current.get(name, {}), patch)
 
 
+def _unknown_fields(fields: Any) -> list[str]:
+    if not isinstance(fields, list):
+        return []
+    # Non-text entries are left to validate_job_settings, which reports them clearly
+    return [field for field in fields if isinstance(field, str) and field not in CANONICAL_FIELDS]
+
+
+def _refuse_unknown_fields(patch: dict[str, Any]) -> None:
+    """Refuse job field names the scraper does not know, so they are never stored.
+
+    Stored settings and restored versions stay lenient: the loader skips unknown
+    names with a warning, so older data keeps working.
+    """
+    sites = patch.get("sites")
+    site_fields = (
+        [site.get("fields") for site in sites.values() if isinstance(site, dict)]
+        if isinstance(sites, dict)
+        else []
+    )
+    unknown = [
+        field
+        for fields in [patch.get("default_fields"), *site_fields]
+        for field in _unknown_fields(fields)
+    ]
+    if unknown:
+        raise ConfigError(f"unknown job fields: {', '.join(sorted(set(unknown)))}")
+
+
 def merge_settings(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     merged = _apply_fields(current, {k: v for k, v in patch.items() if k != "sites"})
     if "sites" not in patch:
@@ -132,6 +161,7 @@ class JobSettingsStore:
     def save(
         self, patch: dict[str, Any], expected_version: int | None, source: str
     ) -> StoredSettings:
+        _refuse_unknown_fields(patch)
         current = self._read_expected(expected_version)
         return self._replace(current, merge_settings(current.settings, patch), source)
 

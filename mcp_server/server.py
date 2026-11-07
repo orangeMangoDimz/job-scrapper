@@ -29,7 +29,7 @@ from scraper.job_settings import (
 from scraper.log import get_logger as _get_logger
 from scraper.log import redact_proxy_url as _redact_proxy_url
 from scraper.runner import run as run_scraper
-from scraper.types import JOB_FIELD_ORDER
+from scraper.types import JOB_FIELD_ORDER, MANDATORY_FIELDS
 
 DEFAULT_CONFIG_PATH = Path(os.environ.get("SCRAPER_CONFIG", "config.yaml"))
 DEFAULT_PROXY_TEST_URL = os.environ.get(
@@ -358,12 +358,19 @@ def get_config() -> dict[str, Any]:
     """Return the job settings stored in Mongo, with their version.
 
     Use this before update_config to see the current shape, then send a
-    minimal patch to change only what you want.
+    minimal patch to change only what you want. job_fields lists every field
+    name default_fields and site fields accept; mandatory_fields are always
+    saved for each job, whatever the settings say.
     """
     try:
-        return _to_payload(_settings_store().read())
+        stored = _settings_store().read()
     except ConfigError as exc:
         return {"error": str(exc)}
+    return {
+        **_to_payload(stored),
+        "job_fields": list(JOB_FIELD_ORDER),
+        "mandatory_fields": [field for field in JOB_FIELD_ORDER if field in MANDATORY_FIELDS],
+    }
 
 
 @mcp.tool()

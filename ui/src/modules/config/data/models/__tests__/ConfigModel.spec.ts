@@ -38,6 +38,8 @@ const MODEL: ConfigModel = {
   updated_at: '2026-11-02T01:00:00+00:00',
   updated_by: 'ui',
   is_stale: false,
+  job_fields: ['site', 'title', 'location', 'salary_min'],
+  mandatory_fields: ['site'],
 }
 
 describe('toConfigSnapshot', () => {
@@ -52,6 +54,36 @@ describe('toConfigSnapshot', () => {
       workType: [],
     })
     expect(snapshot.values.defaultFields).toEqual(['title'])
+  })
+
+  it('lists the job fields and the always-saved ones', () => {
+    const snapshot = toConfigSnapshot(MODEL)
+
+    expect(snapshot.jobFields).toEqual(['site', 'title', 'location', 'salary_min'])
+    expect(snapshot.mandatoryFields).toEqual(['site'])
+  })
+
+  it('drops unknown and always-saved names from the picked job fields', () => {
+    const [upwork] = MODEL.values.sites
+    const model: ConfigModel = {
+      ...MODEL,
+      values: {
+        ...MODEL.values,
+        default_fields: ['site', 'salary_min', 'old_field', 'title'],
+        sites: [{ ...upwork!, fields: ['old_field', 'site', 'location'] }],
+      },
+    }
+
+    const { values } = toConfigSnapshot(model)
+
+    expect(values.defaultFields).toEqual(['salary_min', 'title'])
+    expect(values.sites[0]?.fields).toEqual(['location'])
+  })
+
+  it('keeps a site that uses the default job fields at null', () => {
+    const [upwork] = toConfigSnapshot(MODEL).values.sites
+
+    expect(upwork?.fields).toBeNull()
   })
 
   it('keeps no filter apart from the global filter', () => {

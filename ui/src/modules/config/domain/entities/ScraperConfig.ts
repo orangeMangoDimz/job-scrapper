@@ -36,6 +36,8 @@ export interface ConfigSnapshot {
   updatedAt: string
   updatedBy: string
   isStale: boolean
+  jobFields: string[]
+  mandatoryFields: string[]
 }
 
 export interface ConfigVersion {
@@ -70,6 +72,31 @@ export function toDelaySeconds(min: number | null, max: number | null): [number,
     return null
   }
   return [min ?? (max as number), max ?? (min as number)]
+}
+
+/**
+ * Keeps only the optional job fields the scraper knows. Always-saved fields are
+ * added by the scraper on every run, so they are never stored. An empty known
+ * list means the scraper did not send one, so nothing is dropped as unknown
+ */
+export function toPickedFields(
+  fields: string[],
+  jobFields: string[],
+  mandatoryFields: string[],
+): string[] {
+  const isKnown = (field: string): boolean => jobFields.length === 0 || jobFields.includes(field)
+  return fields.filter((field) => isKnown(field) && !mandatoryFields.includes(field))
+}
+
+const UPPERCASE_WORDS = new Set(['id', 'url'])
+
+/** Turns a stored field name like company_id into a label like "Company ID" */
+export function toJobFieldLabel(field: string): string {
+  const words = field
+    .split('_')
+    .map((word) => (UPPERCASE_WORDS.has(word) ? word.toUpperCase() : word))
+  const [first = '', ...rest] = words
+  return [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join(' ')
 }
 
 function isSame(first: unknown, second: unknown): boolean {

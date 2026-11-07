@@ -52,6 +52,8 @@ async def read_config(services: ServicesDep) -> dict[str, Any]:
             "updated_at": read.value["updated_at"],
             "updated_by": read.value["updated_by"],
             "is_stale": read.is_stale,
+            "job_fields": read.value.get("job_fields", []),
+            "mandatory_fields": read.value.get("mandatory_fields", []),
         }
     )
 

@@ -41,6 +41,15 @@ def test_get_config_returns_settings_with_version(database: Any):
     assert result["settings"]["keywords"] == ["devops"]
 
 
+def test_get_config_lists_job_fields_and_the_always_saved_ones(database: Any):
+    result = server.get_config()
+
+    assert result["job_fields"][:3] == ["site", "matched_keyword", "title"]
+    assert result["job_fields"][-1] == "requirements"
+    assert {"salary_min", "salary_max", "company_id"} <= set(result["job_fields"])
+    assert result["mandatory_fields"] == ["site", "matched_keyword", "title", "company", "url"]
+
+
 def test_get_config_reports_missing_document(monkeypatch: pytest.MonkeyPatch):
     db = mongomock.MongoClient()["job_scraper"]
     monkeypatch.setattr(server.mongo, "get_database", lambda: db)
@@ -70,6 +79,38 @@ def test_update_config_reports_invalid_patch(database: Any):
     assert result["ok"] is False
     assert result["reason"] == "invalid"
     assert "limit" in result["message"]
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"default_fields": ["title", "salary_mni"]},
+        {"sites": {"upwork": {"fields": ["salary_mni"]}}},
+    ],
+)
+def test_update_config_refuses_unknown_job_fields(database: Any, patch: dict[str, Any]):
+    result = server.update_config(patch, expected_version=1)
+
+    assert result["ok"] is False
+    assert result["reason"] == "invalid"
+    assert "salary_mni" in result["message"]
+    assert server.get_config()["version"] == 1
+
+
+def test_update_config_reports_non_text_job_fields_as_invalid(database: Any):
+    result = server.update_config({"default_fields": [["title"]]}, expected_version=1)
+
+    assert result["ok"] is False
+    assert result["reason"] == "invalid"
+
+
+def test_update_config_saves_known_job_fields(database: Any):
+    patch = {"default_fields": ["salary_min"], "sites": {"upwork": {"fields": []}}}
+
+    result = server.update_config(patch, expected_version=1)
+
+    assert result["ok"] is True
+    assert result["settings"]["default_fields"] == ["salary_min"]
 
 
 def test_update_config_refuses_proxy(database: Any):

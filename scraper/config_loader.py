@@ -340,7 +340,9 @@ def parse(raw: dict[str, Any], proxy_url: str | None) -> AppConfig:
 
     if "default_fields" in raw:
         default_fields = _validate_fields(raw["default_fields"], "default_fields")
-        if not default_fields:
+        # An empty list is a choice: keep only the always-saved fields. A list
+        # whose names were all unknown falls back to the defaults instead
+        if not default_fields and raw["default_fields"]:
             default_fields = DEFAULT_FIELDS
     else:
         default_fields = DEFAULT_FIELDS
