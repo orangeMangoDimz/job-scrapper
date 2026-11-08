@@ -300,7 +300,10 @@ job passes through — it is not dropped.
 In the bot image, `supercronic` is the entrypoint, running
 `cron/scraper-crontab`. This file is generated at build time from `config.yaml`
 `bot.schedule` (currently `0 11 * * *` — 11:00 AM daily). Each tick executes
-`cron/run-scraper.sh`, which runs:
+`cron/run-scheduled-scraper.sh`, which checks `BOT_SCHEDULE_ENABLED`. When it is
+`true` (the default) it runs `cron/run-scraper.sh`. When it is `false` the tick
+is skipped. Any other value fails the tick. Manual runs call `cron/run-scraper.sh`
+directly, so they still work when the schedule is off. `cron/run-scraper.sh` runs:
 
 ```bash
 claude --dangerously-skip-permissions --verbose --output-format stream-json \

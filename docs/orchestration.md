@@ -40,6 +40,7 @@ plugin during initial pairing.
 |---|---|
 | `cron/entrypoint.sh` | downloads supercronic on first boot, exec's it |
 | `cron/run-scraper.sh` | runs `claude --verbose --output-format stream-json -p "$(cat prompts/scrape-and-post.md)"` (streams step events live to the log) |
+| `cron/run-scheduled-scraper.sh` | what each cron tick runs: calls `run-scraper.sh` when `BOT_SCHEDULE_ENABLED` is `true` (the default), skips the tick when `false`, fails on any other value |
 | `cron/scraper-crontab` | the schedule (default: `0 1 * * *` — daily at 01:00) |
 | `prompts/scrape-and-post.md` | the prompt Claude reads each tick — calls MCP tool, formats, posts |
 | `claude/mcp.json.example` | project-level MCP registry template (rename to `.mcp.json` when copying to VPS) |

@@ -121,9 +121,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates tzdata \
  && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL "$SUPERCRONIC_URL" -o /usr/local/bin/supercronic \
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 20 "$SUPERCRONIC_URL" -o /usr/local/bin/supercronic \
  && chmod +x /usr/local/bin/supercronic \
- && curl -fsSL "$YQ_URL" -o /usr/local/bin/yq \
+ && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 20 "$YQ_URL" -o /usr/local/bin/yq \
  && chmod +x /usr/local/bin/yq
 
 RUN npm install -g @anthropic-ai/claude-code
@@ -137,9 +137,9 @@ COPY --chown=node:node claude/mcp.json.example ./.mcp.json
 
 RUN SCHEDULE="$(yq -r '.bot.schedule' /workspace/config.yaml)" \
  && echo "Generated cron schedule: $SCHEDULE" \
- && printf '%s /bin/sh /workspace/scraper-bot/cron/run-scraper.sh\n' "$SCHEDULE" \
+ && printf '%s /bin/sh /workspace/scraper-bot/cron/run-scheduled-scraper.sh\n' "$SCHEDULE" \
     > cron/scraper-crontab \
- && chmod +x cron/entrypoint.sh cron/run-scraper.sh \
+ && chmod +x cron/entrypoint.sh cron/run-scraper.sh cron/run-scheduled-scraper.sh \
  && mkdir -p /home/node/.claude \
  && touch /home/node/.claude.json \
  && chown -R node:node /home/node /workspace
