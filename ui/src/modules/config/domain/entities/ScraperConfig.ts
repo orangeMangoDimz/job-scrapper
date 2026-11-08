@@ -30,6 +30,11 @@ export interface ConfigValues {
   sites: SiteSetting[]
 }
 
+export interface LocationOption {
+  label: string
+  value: string
+}
+
 export interface ConfigSnapshot {
   values: ConfigValues
   version: number
@@ -38,6 +43,7 @@ export interface ConfigSnapshot {
   isStale: boolean
   jobFields: string[]
   mandatoryFields: string[]
+  locationOptions: Record<string, LocationOption[]>
 }
 
 export interface ConfigVersion {

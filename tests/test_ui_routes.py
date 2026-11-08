@@ -43,6 +43,7 @@ CONFIG = {
     },
     "job_fields": ["site", "title", "salary_min"],
     "mandatory_fields": ["site", "title"],
+    "location_options": {"jobstreet": [{"label": "Jakarta", "value": "Jakarta Raya"}]},
 }
 HISTORY = [
     {
@@ -67,6 +68,7 @@ class FakeGateway:
         self.config = CONFIG
         self.save_result: dict[str, Any] = SAVED
         self.scrape_delay = 0.0
+        self.scrape_result: dict[str, Any] = SCRAPE_RESULT
         self.calls: list[str] = []
         self.arguments: dict[str, dict[str, Any]] = {}
 
@@ -83,7 +85,7 @@ class FakeGateway:
             "list_sites": SITES,
             "get_config": self.config,
             "get_config_history": {"entries": HISTORY},
-            "scrape_jobs": SCRAPE_RESULT,
+            "scrape_jobs": self.scrape_result,
             "update_config": self.save_result,
             "restore_config": self.save_result,
         }[tool]
@@ -188,6 +190,40 @@ def test_start_run_then_read_result(client: TestClient):
     assert detail["jobs"] == [{"title": "A"}]
 
 
+def test_read_run_returns_raw_and_filtered_payloads(client: TestClient, gateway: FakeGateway):
+    gateway.scrape_result = {
+        **SCRAPE_RESULT,
+        "raw_results": [{"keyword": "devops", "site": "upwork", "payload": {"count": 4}}],
+        "filtered_results": [{"keyword": "devops", "site": "upwork", "payload": {"count": 1}}],
+    }
+    run = _run(client)
+
+    detail = client.get(f"/api/runs/{run['id']}").json()["data"]
+
+    assert detail["payloads"] == [
+        {"keyword": "devops", "site": "upwork", "raw": {"count": 4}, "filtered": {"count": 1}}
+    ]
+    assert detail["jobs"] == [{"title": "A"}]
+
+
+def test_read_run_without_stored_payloads_returns_an_empty_list(client: TestClient):
+    run = _run(client)
+
+    detail = client.get(f"/api/runs/{run['id']}").json()["data"]
+
+    assert detail["payloads"] == []
+
+
+def test_read_run_survives_malformed_stored_payloads(client: TestClient, gateway: FakeGateway):
+    gateway.scrape_result = {**SCRAPE_RESULT, "raw_results": "oops", "filtered_results": [1, None]}
+    run = _run(client)
+
+    response = client.get(f"/api/runs/{run['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["payloads"] == []
+
+
 def test_list_runs_includes_started_run(client: TestClient):
     run = _run(client)
 
@@ -242,6 +278,22 @@ def test_config_read_lists_job_fields_and_the_always_saved_ones(client: TestClie
 
     assert data["job_fields"] == ["site", "title", "salary_min"]
     assert data["mandatory_fields"] == ["site", "title"]
+
+
+def test_config_read_passes_city_options_through(client: TestClient):
+    data = client.get("/api/config").json()["data"]
+
+    assert data["location_options"] == {
+        "jobstreet": [{"label": "Jakarta", "value": "Jakarta Raya"}]
+    }
+
+
+def test_config_read_defaults_city_options_to_empty_for_an_older_scraper(
+    client: TestClient, gateway: FakeGateway
+):
+    gateway.config = {k: v for k, v in CONFIG.items() if k != "location_options"}
+
+    assert client.get("/api/config").json()["data"]["location_options"] == {}
 
 
 def test_config_read_keeps_site_filter_states_apart(client: TestClient):

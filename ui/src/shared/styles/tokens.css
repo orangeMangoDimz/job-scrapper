@@ -13,6 +13,10 @@
   --danger-soft: #fdecea;
   --link: var(--accent);
   --selection: #9fd6b2;
+  --syntax-key: #0b5cad;
+  --syntax-string: #157a3f;
+  --syntax-number: #9a5b00;
+  --syntax-literal: #8a3fb0;
 
   --stage: #101814;
   --on-stage: #ffffff;
@@ -67,6 +71,10 @@
   --danger-soft: #3a1714;
   --link: var(--accent);
   --selection: #2b6e49;
+  --syntax-key: #7fb2f0;
+  --syntax-string: #5ccf8a;
+  --syntax-number: #e5a95c;
+  --syntax-literal: #c79bf0;
 
   --stage: #050807;
   --on-stage: #edf0ee;

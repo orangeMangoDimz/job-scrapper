@@ -28,7 +28,7 @@ function record(status: RunRecord['status']): RunRecord {
 }
 
 function detail(status: RunRecord['status']): RunDetail {
-  return { record: record(status), jobs: [], failures: [] }
+  return { record: record(status), jobs: [], failures: [], payloads: [] }
 }
 
 describe('useRunStore', () => {

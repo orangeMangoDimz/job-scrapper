@@ -18,6 +18,8 @@ scraper/                    # CLI + library
 │   ├── base.py             # FetchChain, looks_like_challenge
 │   ├── cloudscraper.py     # cheap HTTP fetcher (Cloudflare-aware)
 │   └── playwright.py       # browser fallback (lazy import, ~280MB Chromium)
+├── api/
+│   └── locations.py        # fixed city list per site (label + API value) for the UI picker, served by get_config
 └── sites/                  # per-site adapters
     ├── base.py             # Scraper abstract
     ├── _next_data.py       # __NEXT_DATA__ extraction helper
@@ -32,6 +34,16 @@ mcp_server/                 # MCP HTTP server
 ├── server.py               # FastMCP, tools: list_sites, get_config, update_config, get_config_history, restore_config, get_scrape_status, test_proxy_connection, scrape_jobs
 └── __init__.py             # (empty)
 ```
+
+## Scraper UI API (`ui_server/`)
+
+- `GET /api/config`: the job settings plus `location_options`, the same
+  `{site: [{label, value}]}` map `get_config` returns.
+- `GET /api/runs/{id}`: the run record plus `payloads`, a list of
+  `{keyword, site, raw, filtered}` (`raw` / `filtered` are `null` when that
+  side was not stored). Pairs from the run's keywords and sites come first,
+  any other stored pair follows. Runs made before payloads were stored return `[]`.
+  The data comes from `scrape_jobs` called with `include_payloads: true`.
 
 ## Request flow (per scrape run)
 

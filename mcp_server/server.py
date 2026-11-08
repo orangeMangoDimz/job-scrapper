@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from mcp_server import mongo
+from scraper.api.locations import location_options_payload
 from scraper.config import ACCEPT_LANGUAGE, USER_AGENT
 from scraper.config_loader import AppConfig, ConfigError, keyword_slug
 from scraper.job_settings import (
@@ -360,7 +361,8 @@ def get_config() -> dict[str, Any]:
     Use this before update_config to see the current shape, then send a
     minimal patch to change only what you want. job_fields lists every field
     name default_fields and site fields accept; mandatory_fields are always
-    saved for each job, whatever the settings say.
+    saved for each job, whatever the settings say. location_options lists the
+    city picker choices per site (label shown, value saved in api.locations).
     """
     try:
         stored = _settings_store().read()
@@ -370,6 +372,7 @@ def get_config() -> dict[str, Any]:
         **_to_payload(stored),
         "job_fields": list(JOB_FIELD_ORDER),
         "mandatory_fields": [field for field in JOB_FIELD_ORDER if field in MANDATORY_FIELDS],
+        "location_options": location_options_payload(),
     }
 
 
@@ -396,6 +399,8 @@ def get_scrape_response_structure() -> dict[str, Any]:
             "errors",
             "mongo_id",
         ],
+        # only present when scrape_jobs is called with include_payloads=true
+        "optional_top_level_fields": ["raw_results", "filtered_results"],
         "site_result_fields": [
             "site",
             "keyword",
@@ -669,11 +674,23 @@ def test_proxy_connection(
     return merged
 
 
+def _payload_extras(
+    include_payloads: bool,
+    raw_results: list[dict[str, Any]],
+    filtered_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Optional response fields for scrape_jobs; empty unless the caller asked for payloads."""
+    if not include_payloads:
+        return {}
+    return {"raw_results": raw_results, "filtered_results": filtered_results}
+
+
 @mcp.tool()
 def scrape_jobs(
     sites: list[str] | None = None,
     keywords: list[str] | None = None,
     save_run: bool = True,
+    include_payloads: bool = False,
 ) -> dict[str, Any]:
     """Run the job scraper and return aggregated results.
 
@@ -685,6 +702,10 @@ def scrape_jobs(
             changing the job settings.
         save_run: when false, return the results without storing the run in
             Mongo, so it never reaches the scrape history. mongo_id is then null.
+        include_payloads: when true, the response also carries raw_results (each
+            site's output before max-age, filter and limit) and filtered_results
+            (each site's final output file), both lists of {keyword, site, payload}.
+            Off by default to keep the response small.
 
     Returns:
         dict with keys:
@@ -714,6 +735,7 @@ def scrape_jobs(
                   - timeout           network or page-load timeout
                   - runtime_error     unexpected exception (detail = class+msg)
                   - not_installed     fetcher dependency missing
+            raw_results, filtered_results: only when include_payloads is true.
     """
     log = _get_logger()
     log.info("scrape_jobs called sites=%s keywords=%s", sites, keywords)
@@ -790,9 +812,11 @@ def scrape_jobs(
 
     _write_status(result, duration)
 
+    extras = _payload_extras(include_payloads, raw_results, filtered_results)
+
     if not save_run:
         log.info("scrape_jobs: save_run is off, skipping mongo insert")
-        return {**result, "mongo_id": None}
+        return {**result, "mongo_id": None, **extras}
 
     # one document per run; the bot later patches it with Discord columns
     mongo_id: str | None = None
@@ -818,7 +842,7 @@ def scrape_jobs(
         log.error("scrape_jobs: mongo insert failed: %s", exc)
 
     # immutable: build a new dict rather than mutating `result` (already passed to _write_status)
-    return {**result, "mongo_id": mongo_id}
+    return {**result, "mongo_id": mongo_id, **extras}
 
 
 def main() -> None:

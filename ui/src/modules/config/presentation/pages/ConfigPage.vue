@@ -23,6 +23,7 @@ const enabledSiteCount = computed(
 )
 const jobFields = computed(() => store.snapshot?.jobFields ?? [])
 const mandatoryFields = computed(() => store.snapshot?.mandatoryFields ?? [])
+const locationOptions = computed(() => store.snapshot?.locationOptions ?? {})
 const savedAt = computed(() =>
   store.snapshot === null ? '' : new Date(store.snapshot.updatedAt).toLocaleString(),
 )
@@ -94,13 +95,14 @@ onMounted(() => {
           <div class="flex flex-col gap-4">
             <div class="flex flex-col gap-2">
               <Label for="keywords">Keywords, separated by commas</Label>
-              <ListInput id="keywords" v-model="store.values.keywords" />
+              <ListInput id="keywords" v-model="store.values.keywords" placeholder="Keywords" />
             </div>
             <div class="grid gap-4 sm:grid-cols-2">
               <div class="flex flex-col gap-2">
                 <Label for="limit">Limit per site</Label>
                 <Input
                   id="limit"
+                  placeholder="Limit per site"
                   :model-value="store.values.limit ?? ''"
                   type="number"
                   required
@@ -112,6 +114,7 @@ onMounted(() => {
                 <Label for="max-age">Max job age in hours</Label>
                 <Input
                   id="max-age"
+                  placeholder="Max job age in hours"
                   :model-value="store.values.maxAgeHours ?? ''"
                   type="number"
                   :required="store.snapshot?.values.maxAgeHours !== null"
@@ -155,6 +158,7 @@ onMounted(() => {
               :default-fields="store.values.defaultFields"
               :job-fields="jobFields"
               :mandatory-fields="mandatoryFields"
+              :location-options="locationOptions[site.name]"
               @update="updateSite"
             />
           </div>
