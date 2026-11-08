@@ -15,8 +15,8 @@ steps:
       target: mcp-server
       platforms: linux/amd64
       tags:
-        - ${CI_COMMIT_SHA:0:7}
-        - ${CI_PIPELINE_CREATED}-${CI_COMMIT_SHA:0:7}
+        - "${CI_COMMIT_SHA:0:7}"
+        - "${CI_PIPELINE_CREATED}-${CI_COMMIT_SHA:0:7}"
       cache_images:
         - ghcr.io/pt-sinan-akbar/job-scraper-mcp/prod:cache
       username:
@@ -36,8 +36,8 @@ steps:
       target: bot
       platforms: linux/amd64
       tags:
-        - ${CI_COMMIT_SHA:0:7}
-        - ${CI_PIPELINE_CREATED}-${CI_COMMIT_SHA:0:7}
+        - "${CI_COMMIT_SHA:0:7}"
+        - "${CI_PIPELINE_CREATED}-${CI_COMMIT_SHA:0:7}"
       cache_images:
         - ghcr.io/pt-sinan-akbar/job-scraper-bot/prod:cache
       username:
@@ -57,8 +57,8 @@ steps:
       target: ui-server
       platforms: linux/amd64
       tags:
-        - ${CI_COMMIT_SHA:0:7}
-        - ${CI_PIPELINE_CREATED}-${CI_COMMIT_SHA:0:7}
+        - "${CI_COMMIT_SHA:0:7}"
+        - "${CI_PIPELINE_CREATED}-${CI_COMMIT_SHA:0:7}"
       cache_images:
         - ghcr.io/pt-sinan-akbar/job-scraper-ui/prod:cache
       username:
