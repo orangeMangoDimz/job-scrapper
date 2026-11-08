@@ -144,6 +144,7 @@ services:
     environment:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - BOT_SCHEDULE_ENABLED=${BOT_SCHEDULE_ENABLED:-true}
       - TZ=${TZ:-Asia/Jakarta}
     volumes:
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/home/node/.claude
