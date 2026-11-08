@@ -4,6 +4,7 @@ import type {
   ConfigSnapshot,
   ConfigVersion,
   FilterSetting,
+  LocationOption,
   SiteChanges,
   SiteSetting,
 } from '@/modules/config/domain/entities/ScraperConfig'
@@ -32,6 +33,11 @@ export interface SiteModel {
   api: ApiModel | null
 }
 
+export interface LocationOptionModel {
+  label: string
+  value: string
+}
+
 export interface ConfigModel {
   values: {
     keywords: string[]
@@ -47,6 +53,7 @@ export interface ConfigModel {
   is_stale: boolean
   job_fields: string[]
   mandatory_fields: string[]
+  location_options?: Record<string, LocationOptionModel[]>
 }
 
 export interface SiteChangesModel {
@@ -106,6 +113,28 @@ function toSiteSetting(model: SiteModel, pickFields: (fields: string[]) => strin
   }
 }
 
+function isLocationOption(entry: unknown): entry is LocationOption {
+  if (typeof entry !== 'object' || entry === null) {
+    return false
+  }
+  const { label, value } = entry as Partial<LocationOption>
+  return typeof label === 'string' && typeof value === 'string'
+}
+
+/** Keeps only well-formed city lists, so a bad reply never breaks the page */
+function toLocationOptions(model: unknown): Record<string, LocationOption[]> {
+  if (typeof model !== 'object' || model === null || Array.isArray(model)) {
+    return {}
+  }
+  const lists = Object.entries(model).filter(([, list]) => Array.isArray(list))
+  return Object.fromEntries(
+    lists.map(([site, list]) => [
+      site,
+      (list as unknown[]).filter(isLocationOption).map(({ label, value }) => ({ label, value })),
+    ]),
+  )
+}
+
 export function toConfigSnapshot(model: ConfigModel): ConfigSnapshot {
   const pickFields = (fields: string[]): string[] =>
     toPickedFields(fields, model.job_fields, model.mandatory_fields)
@@ -124,6 +153,7 @@ export function toConfigSnapshot(model: ConfigModel): ConfigSnapshot {
     isStale: model.is_stale,
     jobFields: model.job_fields,
     mandatoryFields: model.mandatory_fields,
+    locationOptions: toLocationOptions(model.location_options),
   }
 }
 

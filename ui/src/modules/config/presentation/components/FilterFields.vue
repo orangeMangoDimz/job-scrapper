@@ -23,6 +23,7 @@ function change(changes: Partial<FilterSetting>): void {
       <Label :for="`${idPrefix}-location`">Locations, separated by commas</Label>
       <ListInput
         :id="`${idPrefix}-location`"
+        placeholder="Locations"
         :model-value="modelValue.location"
         @update:model-value="change({ location: $event })"
       />
@@ -31,6 +32,7 @@ function change(changes: Partial<FilterSetting>): void {
       <Label :for="`${idPrefix}-employment`">Employment types, separated by commas</Label>
       <ListInput
         :id="`${idPrefix}-employment`"
+        placeholder="Employment types"
         :model-value="modelValue.employmentType"
         @update:model-value="change({ employmentType: $event })"
       />
@@ -39,6 +41,7 @@ function change(changes: Partial<FilterSetting>): void {
       <Label :for="`${idPrefix}-work`">Work types, separated by commas</Label>
       <ListInput
         :id="`${idPrefix}-work`"
+        placeholder="Work types"
         :model-value="modelValue.workType"
         @update:model-value="change({ workType: $event })"
       />

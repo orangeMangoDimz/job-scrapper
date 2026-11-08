@@ -28,10 +28,20 @@ export interface RunFailure {
   reason: string
 }
 
+export type JsonObject = Record<string, unknown>
+
+export interface RunPayload {
+  keyword: string
+  site: string
+  raw: JsonObject | null
+  filtered: JsonObject | null
+}
+
 export interface RunDetail {
   record: RunRecord
   jobs: RunJob[]
   failures: RunFailure[]
+  payloads: RunPayload[]
 }
 
 export interface SiteOption {

@@ -52,4 +52,61 @@ describe('toRunDetail', () => {
 
     expect(detail.jobs[0]?.company).toBeNull()
   })
+
+  describe('payloads', () => {
+    const PAYLOAD = {
+      keyword: 'AI Engineering',
+      site: 'jobstreet',
+      raw: { items: [1] },
+      filtered: { count: 1, jobs: [{ title: 'Engineer' }] },
+    }
+
+    it('maps payloads with raw and filtered data', () => {
+      const detail = toRunDetail({ ...MODEL, payloads: [PAYLOAD] })
+
+      expect(detail.payloads).toEqual([PAYLOAD])
+    })
+
+    it('keeps null raw and filtered', () => {
+      const detail = toRunDetail({
+        ...MODEL,
+        payloads: [{ ...PAYLOAD, raw: null, filtered: null }],
+      })
+
+      expect(detail.payloads).toEqual([{ ...PAYLOAD, raw: null, filtered: null }])
+    })
+
+    it('treats a missing payloads key as an empty list', () => {
+      expect(toRunDetail(MODEL).payloads).toEqual([])
+    })
+
+    it('treats a payloads value that is not a list as an empty list', () => {
+      const detail = toRunDetail({ ...MODEL, payloads: 'nope' as unknown as undefined })
+
+      expect(detail.payloads).toEqual([])
+    })
+
+    it.each<[string, unknown]>([
+      ['null', null],
+      ['a string', 'text'],
+      ['a number', 7],
+      ['a list', [PAYLOAD]],
+      ['a missing keyword', { site: 'jobstreet', raw: null, filtered: null }],
+      ['a missing site', { keyword: 'AI', raw: null, filtered: null }],
+      ['a keyword that is not text', { ...PAYLOAD, keyword: 4 }],
+      ['a site that is not text', { ...PAYLOAD, site: null }],
+      ['raw that is a list', { ...PAYLOAD, raw: [1, 2] }],
+      ['raw that is text', { ...PAYLOAD, raw: 'text' }],
+      ['filtered that is a number', { ...PAYLOAD, filtered: 5 }],
+      ['filtered that is a list', { ...PAYLOAD, filtered: [] }],
+      ['a missing raw key', { keyword: 'AI', site: 'jobstreet', filtered: null }],
+    ])('drops an entry with %s', (_label, entry) => {
+      const detail = toRunDetail({
+        ...MODEL,
+        payloads: [entry, PAYLOAD] as unknown as RunDetailModel['payloads'],
+      })
+
+      expect(detail.payloads).toEqual([PAYLOAD])
+    })
+  })
 })

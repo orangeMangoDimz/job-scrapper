@@ -26,6 +26,7 @@ const SNAPSHOT: ConfigSnapshot = {
   isStale: false,
   jobFields: ['site', 'title', 'company', 'salary_min', 'company_id'],
   mandatoryFields: ['site', 'company'],
+  locationOptions: {},
 }
 
 const VERSION = {
@@ -129,5 +130,52 @@ describe('ConfigPage', () => {
     expect(restoreConfig.execute).toHaveBeenCalledWith(3, 4)
     expect(hasPageSkeleton(wrapper)).toBe(false)
     expect(wrapper.text()).toContain('Version 3')
+  })
+
+  it('shows a placeholder in each empty box of the global section', async () => {
+    getConfig.execute.mockResolvedValue({
+      ...SNAPSHOT,
+      values: { ...SNAPSHOT.values, keywords: [], limit: null, maxAgeHours: null },
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const hint = (id: string): string | undefined => wrapper.get(id).attributes('placeholder')
+    expect(hint('#keywords')).toBe('Keywords')
+    expect(hint('#limit')).toBe('Limit per site')
+    expect(hint('#max-age')).toBe('Max job age in hours')
+    expect(hint('#global-location')).toBe('Locations')
+    expect(hint('#global-employment')).toBe('Employment types')
+    expect(hint('#global-work')).toBe('Work types')
+  })
+
+  it('gives a site a city picker only when the scraper sent a city list for it', async () => {
+    const api = { isEnabled: true, locations: [], isCountryWide: false, delaySeconds: null }
+    const site = { isEnabled: true, limit: null, maxAgeHours: null, filter: null, fields: null }
+    getConfig.execute.mockResolvedValue({
+      ...SNAPSHOT,
+      values: {
+        ...SNAPSHOT.values,
+        sites: [
+          { ...site, name: 'glints', api },
+          { ...site, name: 'upwork', api: { ...api, locations: ['Remote'] } },
+        ],
+      },
+      locationOptions: { glints: [{ label: 'Jakarta', value: 'jakarta-id' }] },
+    })
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe = vi.fn<ResizeObserver['observe']>()
+        unobserve = vi.fn<ResizeObserver['unobserve']>()
+        disconnect = vi.fn<ResizeObserver['disconnect']>()
+      },
+    )
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('#glints-api-locations').exists()).toBe(true)
+    expect(wrapper.find('#upwork-api-locations').exists()).toBe(false)
+    vi.unstubAllGlobals()
   })
 })

@@ -5,22 +5,25 @@ import {
   toOptionalNumber,
   type ApiSetting,
   type SiteChanges,
+  type LocationOption,
   type SiteSetting,
 } from '@/modules/config/domain/entities/ScraperConfig'
 import FilterFields from '@/modules/config/presentation/components/FilterFields.vue'
-import LineListInput from '@/modules/config/presentation/components/LineListInput.vue'
 import JobFieldsInput from '@/modules/config/presentation/components/JobFieldsInput.vue'
+import LocationPicker from '@/modules/config/presentation/components/LocationPicker.vue'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 
 const GLOBAL_VALUE_HINT = 'Global'
+const NO_SEARCH_WARNING = 'No city and no country search: this site finds nothing'
 
 const props = defineProps<{
   site: SiteSetting
   defaultFields: string[]
   jobFields: string[]
   mandatoryFields: string[]
+  locationOptions?: LocationOption[]
 }>()
 
 const emit = defineEmits<{
@@ -135,13 +138,24 @@ function changeDelayMax(value: string | number): void {
             />
             <Label :for="`${site.name}-api-country`">Also search the whole country</Label>
           </div>
-          <div class="flex flex-col gap-2">
-            <Label :for="`${site.name}-api-locations`">API locations, one per line</Label>
-            <LineListInput
+          <div
+            v-if="locationOptions !== undefined && locationOptions.length > 0"
+            class="flex flex-col gap-2"
+          >
+            <Label :for="`${site.name}-api-locations`">API locations</Label>
+            <LocationPicker
               :id="`${site.name}-api-locations`"
               :model-value="site.api.locations"
+              :options="locationOptions"
               @update:model-value="changeApi({ locations: $event })"
             />
+            <p
+              v-if="site.api.locations.length === 0 && !site.api.isCountryWide"
+              role="status"
+              class="text-body-sm text-danger"
+            >
+              {{ NO_SEARCH_WARNING }}
+            </p>
           </div>
           <div class="flex items-center gap-3">
             <Label :for="`${site.name}-api-delay-min`">Delay in seconds, min and max</Label>
@@ -152,6 +166,7 @@ function changeDelayMax(value: string | number): void {
               min="0"
               step="0.5"
               class="w-24"
+              placeholder="Min delay"
               @update:model-value="changeDelayMin"
             />
             <Input
@@ -161,6 +176,7 @@ function changeDelayMax(value: string | number): void {
               step="0.5"
               class="w-24"
               :aria-label="`${site.name} max delay`"
+              placeholder="Max delay"
               @update:model-value="changeDelayMax"
             />
           </div>

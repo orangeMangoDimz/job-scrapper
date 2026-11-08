@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from ui_server.errors import RunNotFoundError
-from ui_server.services.run_store import RunStatus, RunStore, flatten_result
+from ui_server.services.run_store import RunStatus, RunStore, build_payloads, flatten_result
 
 
 def _store(tmp_path: Path, keep_runs: int = 50) -> RunStore:
@@ -153,3 +153,89 @@ def test_flatten_result_returns_jobs_and_failures():
 
     assert jobs == [{"title": "job 0"}]
     assert failures == [{"keyword": "django", "site": "indeed", "reason": "timeout"}]
+
+
+def _payload_result() -> dict:
+    return {
+        "ok": True,
+        "results": [],
+        "errors": [],
+        "raw_results": [
+            {"keyword": "ai", "site": "glints", "payload": {"count": 5}},
+            {"keyword": "ai", "site": "jobstreet", "payload": {"count": 4}},
+            {"keyword": "ml", "site": "jobstreet", "payload": {"count": 2}},
+        ],
+        "filtered_results": [
+            {"keyword": "ml", "site": "jobstreet", "payload": {"count": 1}},
+            {"keyword": "ai", "site": "jobstreet", "payload": {"count": 3}},
+        ],
+    }
+
+
+def test_build_payloads_pairs_raw_and_filtered_in_requested_order():
+    payloads = build_payloads(_payload_result(), ("ai", "ml"), ("jobstreet", "glints"))
+
+    assert payloads == [
+        {"keyword": "ai", "site": "jobstreet", "raw": {"count": 4}, "filtered": {"count": 3}},
+        {"keyword": "ai", "site": "glints", "raw": {"count": 5}, "filtered": None},
+        {"keyword": "ml", "site": "jobstreet", "raw": {"count": 2}, "filtered": {"count": 1}},
+    ]
+
+
+def test_build_payloads_appends_stored_pairs_outside_the_record():
+    result = {
+        "raw_results": [
+            {"keyword": "zz", "site": "indeed", "payload": {"count": 7}},
+            {"keyword": "ai", "site": "jobstreet", "payload": {"count": 4}},
+            {"keyword": "ml", "site": "glints", "payload": {"count": 6}},
+        ],
+        "filtered_results": [
+            {"keyword": "ml", "site": "glints", "payload": {"count": 2}},
+            {"keyword": "ai", "site": "linkedin", "payload": {"count": 1}},
+        ],
+    }
+
+    payloads = build_payloads(result, ("ai",), ("jobstreet",))
+
+    assert payloads == [
+        {"keyword": "ai", "site": "jobstreet", "raw": {"count": 4}, "filtered": None},
+        {"keyword": "zz", "site": "indeed", "raw": {"count": 7}, "filtered": None},
+        {"keyword": "ml", "site": "glints", "raw": {"count": 6}, "filtered": {"count": 2}},
+        {"keyword": "ai", "site": "linkedin", "raw": None, "filtered": {"count": 1}},
+    ]
+
+
+def test_build_payloads_is_empty_for_an_old_result():
+    assert build_payloads({"ok": True, "results": []}, ("ai",), ("jobstreet",)) == []
+    assert build_payloads({}, ("ai",), ("jobstreet",)) == []
+
+
+def test_build_payloads_skips_malformed_entries():
+    result = {
+        "raw_results": [
+            "junk",
+            {"keyword": "ai"},
+            {"keyword": "ai", "site": "jobstreet", "payload": "not an object"},
+            {"keyword": "ai", "site": "glints", "payload": {"count": 1}},
+            {"keyword": ["x"], "site": "glints", "payload": {"count": 9}},
+        ],
+        "filtered_results": {"not": "a list"},
+    }
+
+    payloads = build_payloads(result, ("ai",), ("jobstreet", "glints"))
+
+    assert payloads == [{"keyword": "ai", "site": "glints", "raw": {"count": 1}, "filtered": None}]
+
+
+def test_build_payloads_tolerates_non_list_sections():
+    result = {"raw_results": None, "filtered_results": 5}
+
+    assert build_payloads(result, ("ai",), ("jobstreet",)) == []
+
+
+def test_read_result_ignores_a_result_file_that_is_not_an_object(tmp_path: Path):
+    store = _store(tmp_path)
+    record = store.create(("django",), ("upwork",))
+    (tmp_path / "ui-runs" / record.id / "result.json").write_text("[1, 2]", encoding="utf-8")
+
+    assert store.read_result(record.id) == {}

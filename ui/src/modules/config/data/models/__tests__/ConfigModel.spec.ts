@@ -106,6 +106,57 @@ describe('toConfigSnapshot', () => {
   })
 })
 
+describe('toConfigSnapshot location options', () => {
+  it('maps the city list of each site', () => {
+    const model: ConfigModel = {
+      ...MODEL,
+      location_options: {
+        glints: [
+          { label: 'Jakarta', value: '78d63064' },
+          { label: 'Bandung', value: 'bandung-id' },
+        ],
+      },
+    }
+
+    expect(toConfigSnapshot(model).locationOptions).toEqual({
+      glints: [
+        { label: 'Jakarta', value: '78d63064' },
+        { label: 'Bandung', value: 'bandung-id' },
+      ],
+    })
+  })
+
+  it('treats a missing location_options key as no lists', () => {
+    expect(toConfigSnapshot(MODEL).locationOptions).toEqual({})
+  })
+
+  it('skips a malformed list and malformed entries', () => {
+    const model = {
+      ...MODEL,
+      location_options: {
+        glints: [
+          { label: 'Jakarta', value: 'ok' },
+          { label: 5, value: 'x' },
+          null,
+          { label: 'No value' },
+        ],
+        jobstreet: 'oops',
+        linkedin: null,
+      },
+    } as unknown as ConfigModel
+
+    expect(toConfigSnapshot(model).locationOptions).toEqual({
+      glints: [{ label: 'Jakarta', value: 'ok' }],
+    })
+  })
+
+  it('treats a location_options that is not an object as no lists', () => {
+    const model = { ...MODEL, location_options: [] } as unknown as ConfigModel
+
+    expect(toConfigSnapshot(model).locationOptions).toEqual({})
+  })
+})
+
 describe('toConfigChangesModel', () => {
   it('maps changed fields to API names', () => {
     const model = toConfigChangesModel({

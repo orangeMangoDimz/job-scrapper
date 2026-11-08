@@ -50,6 +50,13 @@ def test_get_config_lists_job_fields_and_the_always_saved_ones(database: Any):
     assert result["mandatory_fields"] == ["site", "matched_keyword", "title", "company", "url"]
 
 
+def test_get_config_lists_city_options_for_sites_with_a_picker(database: Any):
+    options = server.get_config()["location_options"]
+
+    assert set(options) == {"jobstreet", "glints", "linkedin"}
+    assert options["jobstreet"][0] == {"label": "Jakarta", "value": "Jakarta Raya"}
+
+
 def test_get_config_reports_missing_document(monkeypatch: pytest.MonkeyPatch):
     db = mongomock.MongoClient()["job_scraper"]
     monkeypatch.setattr(server.mongo, "get_database", lambda: db)

@@ -9,7 +9,7 @@ from ui_server.dependencies import ServicesDep, require_session
 from ui_server.errors import ConfigInvalidError
 from ui_server.schema.response import ok
 from ui_server.schema.runs import StartRunRequest
-from ui_server.services.run_store import flatten_result
+from ui_server.services.run_store import build_payloads, flatten_result
 
 router = APIRouter(prefix="/api/runs", dependencies=[Depends(require_session)])
 
@@ -34,5 +34,7 @@ async def start_run(body: StartRunRequest, services: ServicesDep) -> dict[str, A
 @router.get("/{run_id}")
 def read_run(run_id: str, services: ServicesDep) -> dict[str, Any]:
     record = services.run_store.get(run_id)
-    jobs, failures = flatten_result(services.run_store.read_result(run_id))
-    return ok({"record": asdict(record), "jobs": jobs, "failures": failures})
+    result = services.run_store.read_result(run_id)
+    jobs, failures = flatten_result(result)
+    payloads = build_payloads(result, record.keywords, record.sites)
+    return ok({"record": asdict(record), "jobs": jobs, "failures": failures, "payloads": payloads})

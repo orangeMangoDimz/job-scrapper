@@ -79,6 +79,37 @@ def flatten_result(
     return jobs, list(result.get("errors", []))
 
 
+def _payload_files(result: dict[str, Any], key: str) -> dict[tuple[str, str], dict[str, Any]]:
+    entries = result.get(key)
+    if not isinstance(entries, list):
+        return {}
+    files: dict[tuple[str, str], dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        keyword, site, payload = entry.get("keyword"), entry.get("site"), entry.get("payload")
+        if isinstance(keyword, str) and isinstance(site, str) and isinstance(payload, dict):
+            files[(keyword, site)] = payload
+    return files
+
+
+def build_payloads(
+    result: dict[str, Any], keywords: tuple[str, ...], sites: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    raw = _payload_files(result, "raw_results")
+    filtered = _payload_files(result, "filtered_results")
+    # record order first, then any other stored pair in stored order (dicts keep insertion order)
+    stored = dict.fromkeys([*raw, *filtered])
+    known = [(keyword, site) for keyword in keywords for site in sites]
+    known_set = set(known)
+    pairs = [pair for pair in known if pair in stored]
+    pairs += [pair for pair in stored if pair not in known_set]
+    return [
+        {"keyword": pair[0], "site": pair[1], "raw": raw.get(pair), "filtered": filtered.get(pair)}
+        for pair in pairs
+    ]
+
+
 def _status_for(result: dict[str, Any], job_count: int) -> RunStatus:
     if result.get("ok"):
         return RunStatus.SUCCEEDED
@@ -140,10 +171,11 @@ class RunStore:
         if not path.exists():
             return {}
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            result = json.loads(path.read_text(encoding="utf-8"))
         except UNREADABLE_ERRORS as exc:
             LOG.warning("unreadable run result %s: %s", run_id, exc)
             return {}
+        return result if isinstance(result, dict) else {}
 
     def list_recent(self) -> tuple[RunRecord, ...]:
         records = (self._read_or_none(run_id) for run_id in reversed(self._run_ids()))

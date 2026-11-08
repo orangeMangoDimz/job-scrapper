@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 
-import type { RunOptions, RunRecord } from '@/modules/runs/domain/entities/Run'
+import type { RunDetail, RunOptions, RunRecord } from '@/modules/runs/domain/entities/Run'
 import RunsPage from '@/modules/runs/presentation/pages/RunsPage.vue'
 import { provideRunUseCases } from '@/modules/runs/presentation/stores/runUseCases'
 import { useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
@@ -133,5 +133,35 @@ describe('RunsPage', () => {
 
     expect(getOptions.execute).toHaveBeenCalledTimes(2)
     expect(keywordInput(wrapper).value).toBe('django')
+  })
+
+  it('orders the sections: start a run, results, history, live logs', async () => {
+    getOptions.execute.mockResolvedValue(OPTIONS)
+    listRuns.execute.mockResolvedValue([RUN])
+    getRun.execute.mockResolvedValue({
+      record: RUN,
+      jobs: [],
+      failures: [],
+      payloads: [],
+    } satisfies RunDetail)
+    const wrapper = mountPage()
+    await flushPromises()
+    await historyRows(wrapper)[0]!.trigger('click')
+    await flushPromises()
+
+    const headings = wrapper.findAll('section h2').map((heading) => heading.text())
+
+    expect(headings).toEqual(['Start a run', 'Results', 'History', 'Live logs'])
+  })
+
+  it('puts the live logs last while no run is selected', async () => {
+    getOptions.execute.mockResolvedValue(OPTIONS)
+    listRuns.execute.mockResolvedValue([RUN])
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const headings = wrapper.findAll('section h2').map((heading) => heading.text())
+
+    expect(headings).toEqual(['Start a run', 'History', 'Live logs'])
   })
 })

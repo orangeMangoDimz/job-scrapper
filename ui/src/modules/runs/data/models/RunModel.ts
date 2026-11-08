@@ -1,6 +1,8 @@
 import type {
+  JsonObject,
   RunDetail,
   RunJob,
+  RunPayload,
   RunOptions,
   RunRecord,
   RunStatus,
@@ -32,6 +34,7 @@ export interface RunDetailModel {
   record: RunRecordModel
   jobs: RunJobModel[]
   failures: RunDetail['failures']
+  payloads?: unknown[]
 }
 
 export interface RunOptionsModel {
@@ -72,11 +75,44 @@ function toRunJob(model: RunJobModel): RunJob {
   }
 }
 
+function isPlainObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isObjectOrNull(value: unknown): value is JsonObject | null {
+  return value === null || isPlainObject(value)
+}
+
+function toRunPayload(entry: unknown): RunPayload | null {
+  if (!isPlainObject(entry)) {
+    return null
+  }
+  const { keyword, site, raw, filtered } = entry
+  if (typeof keyword !== 'string' || typeof site !== 'string') {
+    return null
+  }
+  if (!isObjectOrNull(raw) || !isObjectOrNull(filtered)) {
+    return null
+  }
+  return { keyword, site, raw, filtered }
+}
+
+function toRunPayloads(entries: unknown): RunPayload[] {
+  if (!Array.isArray(entries)) {
+    return []
+  }
+  return entries.flatMap((entry) => {
+    const payload = toRunPayload(entry)
+    return payload === null ? [] : [payload]
+  })
+}
+
 export function toRunDetail(model: RunDetailModel): RunDetail {
   return {
     record: toRunRecord(model.record),
     jobs: model.jobs.map(toRunJob),
     failures: model.failures,
+    payloads: toRunPayloads(model.payloads),
   }
 }
 

@@ -64,8 +64,6 @@ onBeforeUnmount(() => store.stopPolling())
       </p>
     </PageSection>
 
-    <LiveLogPanel />
-
     <RunResults v-if="store.selected" :detail="store.selected" />
 
     <PageSection v-if="showsHistory" title="History" description="Pick a run to see its results">
@@ -75,5 +73,7 @@ onBeforeUnmount(() => store.stopPolling())
       </div>
       <RunHistory v-else :runs="store.runs" :selected-id="selectedId" @select="store.select" />
     </PageSection>
+
+    <LiveLogPanel />
   </div>
 </template>

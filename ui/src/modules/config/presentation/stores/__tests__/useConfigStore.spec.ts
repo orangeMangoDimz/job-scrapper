@@ -24,6 +24,7 @@ const SNAPSHOT: ConfigSnapshot = {
   isStale: false,
   jobFields: ['site', 'title', 'company', 'salary_min', 'company_id'],
   mandatoryFields: ['site', 'company'],
+  locationOptions: {},
 }
 
 const VERSION = {

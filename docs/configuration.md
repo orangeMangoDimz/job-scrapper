@@ -233,6 +233,11 @@ sites:
 - `enabled` (default `true`): `false` skips the API and uses HTML only.
 - `locations`: one API call per entry. Format is per site: JobStreet `where`
   label, Glints location UUID, LinkedIn place name (`"Jakarta, Indonesia"`).
+- The UI Config page picks `locations` from the fixed list in
+  `scraper/api/locations.py` (JobStreet, Glints, LinkedIn). To add a city,
+  add one `("Label", "value")` line to that site's tuple (same label order on
+  every site). LinkedIn has only 6 verified cities because rate limits blocked
+  checking the rest.
 - `country_wide`: adds one extra call without a city and keeps only jobs whose
   location is labelled just `Indonesia`.
 - `delay_seconds` (default `[1, 2]`): random pause between this site's API

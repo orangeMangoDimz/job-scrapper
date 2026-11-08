@@ -54,6 +54,10 @@
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-link: var(--link);
+  --color-syntax-key: var(--syntax-key);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-number: var(--syntax-number);
+  --color-syntax-literal: var(--syntax-literal);
   --color-stage: var(--stage);
   --color-on-stage: var(--on-stage);
   --color-stage-chip: var(--stage-chip);

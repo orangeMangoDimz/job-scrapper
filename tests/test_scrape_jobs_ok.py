@@ -296,3 +296,71 @@ def test_ok_false_when_settings_cannot_load(mock_load):
     result = scrape_jobs(keywords=["data analyst"], sites=["jobstreet"])
 
     assert result == {"ok": False, "error": "settings missing"}
+
+
+RAW_PAYLOAD = {"keyword": "data analyst", "count": 3, "jobs": [{"title": "A"}, {"title": "B"}]}
+FILTERED_PAYLOAD = {
+    "keyword": "data analyst",
+    "fields": ["title"],
+    "count": 1,
+    "jobs": [{"title": "A"}],
+    "max_age_hours": None,
+    "filter": None,
+}
+
+
+def _scrape(mock_read, mock_read_raw, mock_load, **kwargs):
+    mock_load.return_value = _make_config()
+    mock_read_raw.return_value = RAW_PAYLOAD
+    mock_read.return_value = FILTERED_PAYLOAD
+
+    from mcp_server.server import scrape_jobs
+
+    return scrape_jobs(keywords=["data analyst"], sites=["jobstreet"], **kwargs)
+
+
+@patch("mcp_server.server.mongo")
+@patch("mcp_server.server.run_scraper", return_value=0)
+@patch("mcp_server.server._load_config")
+@patch("mcp_server.server._read_site_raw_output")
+@patch("mcp_server.server._read_site_output")
+def test_scrape_jobs_omits_payloads_by_default(
+    mock_read, mock_read_raw, mock_load, mock_run, mock_mongo
+):
+    result = _scrape(mock_read, mock_read_raw, mock_load)
+
+    assert "raw_results" not in result
+    assert "filtered_results" not in result
+
+
+@patch("mcp_server.server.mongo")
+@patch("mcp_server.server.run_scraper", return_value=0)
+@patch("mcp_server.server._load_config")
+@patch("mcp_server.server._read_site_raw_output")
+@patch("mcp_server.server._read_site_output")
+def test_scrape_jobs_includes_raw_and_filtered_payloads_when_asked(
+    mock_read, mock_read_raw, mock_load, mock_run, mock_mongo
+):
+    result = _scrape(mock_read, mock_read_raw, mock_load, include_payloads=True)
+
+    assert result["raw_results"] == [
+        {"keyword": "data analyst", "site": "jobstreet", "payload": RAW_PAYLOAD}
+    ]
+    assert result["filtered_results"] == [
+        {"keyword": "data analyst", "site": "jobstreet", "payload": FILTERED_PAYLOAD}
+    ]
+
+
+@patch("mcp_server.server.mongo")
+@patch("mcp_server.server.run_scraper", return_value=0)
+@patch("mcp_server.server._load_config")
+@patch("mcp_server.server._read_site_raw_output")
+@patch("mcp_server.server._read_site_output")
+def test_scrape_jobs_includes_payloads_when_run_is_not_saved(
+    mock_read, mock_read_raw, mock_load, mock_run, mock_mongo
+):
+    result = _scrape(mock_read, mock_read_raw, mock_load, include_payloads=True, save_run=False)
+
+    assert result["mongo_id"] is None
+    assert len(result["raw_results"]) == 1
+    assert len(result["filtered_results"]) == 1

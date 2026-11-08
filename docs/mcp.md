@@ -93,12 +93,20 @@ Read-only. Returns the job settings from Mongo, with their version.
     "sites": {}
   },
   "job_fields": ["site", "matched_keyword", "title", "..."],
-  "mandatory_fields": ["site", "matched_keyword", "title", "company", "url"]
+  "mandatory_fields": ["site", "matched_keyword", "title", "company", "url"],
+  "location_options": {
+    "jobstreet": [{"label": "Jakarta", "value": "Jakarta Raya"}, "..."],
+    "glints": [{"label": "Jakarta", "value": "78d63064-78a1-4577-8516-036a6c5e903e"}, "..."],
+    "linkedin": [{"label": "Jakarta", "value": "Jakarta, Indonesia"}, "..."]
+  }
 }
 ```
 
 - `job_fields`: every field name `default_fields` and `sites.<name>.fields` accept, in scraper order
 - `mandatory_fields`: fields saved for every job whatever the settings say
+- `location_options`: the fixed city list per site (from `scraper/api/locations.py`).
+  `label` is what the UI shows, `value` is what goes into `sites.<name>.api.locations`.
+  Sites without an API city list (indeed, upwork) are absent
 
 Returns `{"error": "..."}` when Mongo is down or the document is missing.
 
@@ -119,6 +127,7 @@ Read-only. Returns canonical response contract for `scrape_jobs`.
   "version": "1.0.0",
   "job_fields": ["site", "matched_keyword", "title", "..."],
   "top_level_fields": ["ok", "keywords", "requested_sites", "exit_code", "results", "errors"],
+  "optional_top_level_fields": ["raw_results", "filtered_results"],
   "site_result_fields": ["site", "keyword", "fields", "max_age_hours", "filter", "count", "jobs"],
   "error_fields": ["keyword", "site", "reason", "attempts"],
   "sample": { "...": "example payload" }
@@ -274,7 +283,8 @@ aggregated results.
 {
   "sites": ["linkedin", "indeed"],
   "keywords": ["data analyst"],
-  "save_run": true
+  "save_run": true,
+  "include_payloads": false
 }
 ```
 
@@ -283,6 +293,10 @@ aggregated results.
 - `save_run`: store the run in MongoDB. Omitted = `true`. The job-match search
   box and the scraper UI send `false`, so their results are shown once and stay
   out of the scrape history. `mongo_id` is then `null`.
+- `include_payloads`: add `raw_results` and `filtered_results` to the response.
+  Omitted = `false`. Off by default because both carry every site's full output,
+  which makes the response much bigger; the main backend bot keeps the smaller
+  response. The scraper UI sends `true` to show each run's raw and filtered data.
 
 **Returns**:
 
@@ -315,6 +329,14 @@ aggregated results.
 
 `results` is always grouped by keyword first, then site. `errors` collects
 any pair whose JSON couldn't be read or whose fetch failed.
+
+With `include_payloads: true` the response also has two optional lists, each
+entry `{"keyword": "...", "site": "...", "payload": {...}}`:
+
+- `raw_results`: each site's output before max-age, filter and limit
+- `filtered_results`: each site's final output file
+
+Without the flag these two keys are not in the response.
 
 When the job settings cannot be loaded (Mongo is down, the document is missing, or `SCRAPER_PROXY_URL` is not set), `scrape_jobs` returns `{"ok": false, "error": "..."}` and scrapes nothing.
 
