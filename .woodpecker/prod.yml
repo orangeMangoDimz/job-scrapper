@@ -72,9 +72,9 @@ steps:
     image: appleboy/drone-discord
     settings:
       webhook_id:
-        from_secret: discord_webhook_id
+        from_secret: banteng_discord_webhook_id
       webhook_token:
-        from_secret: discord_webhook_token
+        from_secret: banteng_discord_webhook_token
       message: >
         {{repo.name}} [{{commit.branch}}] build #{{build.number}} ({{truncate commit.sha 7}}) | status: success. {{build.link}}
 
@@ -84,8 +84,8 @@ steps:
     image: appleboy/drone-discord
     settings:
       webhook_id:
-        from_secret: discord_webhook_id
+        from_secret: banteng_discord_webhook_id
       webhook_token:
-        from_secret: discord_webhook_token
+        from_secret: banteng_discord_webhook_token
       message: >
         {{repo.name}} [{{commit.branch}}] build #{{build.number}} ({{truncate commit.sha 7}}) | status: failed. {{build.link}}
