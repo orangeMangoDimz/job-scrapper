@@ -65,27 +65,3 @@ steps:
         from_secret: ghcr_username
       password:
         from_secret: ghcr_token
-
-  - name: discord success notification
-    when:
-      status: [ success ]
-    image: appleboy/drone-discord
-    settings:
-      webhook_id:
-        from_secret: discord_webhook_id
-      webhook_token:
-        from_secret: discord_webhook_token
-      message: >
-        {{repo.name}} [{{commit.branch}}] build #{{build.number}} ({{truncate commit.sha 7}}) | status: success. {{build.link}}
-
-  - name: discord failure notification
-    when:
-      status: [ failure ]
-    image: appleboy/drone-discord
-    settings:
-      webhook_id:
-        from_secret: discord_webhook_id
-      webhook_token:
-        from_secret: discord_webhook_token
-      message: >
-        {{repo.name}} [{{commit.branch}}] build #{{build.number}} ({{truncate commit.sha 7}}) | status: failed. {{build.link}}
