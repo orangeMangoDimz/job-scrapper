@@ -112,19 +112,20 @@ CMD []
 # =============================================================================
 # STAGE: bot — node + claude-code + supercronic; runs scheduled scrapes via claude
 # =============================================================================
-FROM node:20-slim AS bot
+FROM golang:1.27 AS supercronic-binary
 
-ARG SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/latest/download/supercronic-linux-amd64
-ARG YQ_URL=https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+RUN CGO_ENABLED=0 GOBIN=/out go install github.com/aptible/supercronic@v0.2.51
+
+FROM mikefarah/yq:4.54.2 AS yq-binary
+
+FROM node:20-slim AS bot
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates tzdata \
  && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 20 "$SUPERCRONIC_URL" -o /usr/local/bin/supercronic \
- && chmod +x /usr/local/bin/supercronic \
- && curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 20 "$YQ_URL" -o /usr/local/bin/yq \
- && chmod +x /usr/local/bin/yq
+COPY --from=supercronic-binary /out/supercronic /usr/local/bin/supercronic
+COPY --from=yq-binary /usr/bin/yq /usr/local/bin/yq
 
 RUN npm install -g @anthropic-ai/claude-code
 
