@@ -91,7 +91,8 @@ The bot container uses `http://host.docker.internal:8080/mcp` instead of
 `localhost` — `localhost` inside a container refers to the container itself, not
 the host. The value in `claude/mcp.json.example` already ships with the Docker
 URL and is baked into the bot image as `/workspace/scraper-bot/.mcp.json`
-(Dockerfile `bot` stage).
+(Dockerfile `bot` stage). Set `MCP_URL` to point the bot at another MCP server,
+for example `http://job-scrapper-revamp-mcp-service/mcp` on Kubernetes.
 
 Compose wiring that makes this work:
 
