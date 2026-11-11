@@ -92,7 +92,7 @@ onMounted(() => {
 
     <form class="flex flex-col gap-6 md:gap-4" @submit.prevent="save">
       <fieldset :disabled="isStale" class="flex min-w-0 flex-col gap-6 border-0 p-0 md:gap-4">
-        <PageSection title="General" description="What to search for and how much to keep">
+        <PageSection title="General">
           <div class="flex flex-col gap-4">
             <div class="flex flex-col gap-2">
               <Label for="keywords">Keywords, separated by commas</Label>
@@ -127,17 +127,11 @@ onMounted(() => {
           </div>
         </PageSection>
 
-        <PageSection
-          title="Global filter"
-          description="Applies to every site that has no filter of its own"
-        >
+        <PageSection title="Global filter">
           <FilterFields id-prefix="global" v-model="store.values.filter" />
         </PageSection>
 
-        <PageSection
-          title="Job fields"
-          description="Pick the fields saved for each job. Locked fields are always saved"
-        >
+        <PageSection title="Job fields">
           <JobFieldsInput
             id-prefix="default"
             legend="Job fields"

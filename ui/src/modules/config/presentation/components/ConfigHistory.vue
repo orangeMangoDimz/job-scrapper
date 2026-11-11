@@ -40,7 +40,7 @@ async function confirmRestore(version: number): Promise<void> {
 </script>
 
 <template>
-  <PageSection title="Older versions" description="Restore an earlier config">
+  <PageSection title="Older versions">
     <p v-if="store.historyError" role="alert" class="text-body-sm text-danger">
       {{ store.historyError }}
     </p>
