@@ -78,4 +78,48 @@ describe('RunHistory', () => {
 
     expect(wrapper.emitted('select')).toEqual([['b']])
   })
+
+  it('shows only the first 3 runs and no toggle when there are 3 or fewer', () => {
+    const wrapper = mountHistory(['a', 'b', 'c'].map((id) => makeRun(id, 'succeeded')))
+
+    expect(wrapper.findAll('li')).toHaveLength(3)
+    expect(wrapper.find('[aria-controls]').exists()).toBe(false)
+  })
+
+  it('collapses to the first 3 runs and expands and collapses with the toggle', async () => {
+    const wrapper = mountHistory(['a', 'b', 'c', 'd', 'e'].map((id) => makeRun(id, 'succeeded')))
+    const toggle = wrapper.get('[aria-controls]')
+
+    expect(wrapper.findAll('li')).toHaveLength(3)
+    expect(toggle.text()).toContain('Show 2 more')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+
+    await toggle.trigger('click')
+
+    expect(wrapper.findAll('li')).toHaveLength(5)
+    expect(toggle.text()).toContain('Show less')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+
+    await toggle.trigger('click')
+
+    expect(wrapper.findAll('li')).toHaveLength(3)
+  })
+
+  it('keeps the selected run on screen when the list is collapsed', () => {
+    const runs = ['a', 'b', 'c', 'd', 'e'].map((id) => makeRun(id, 'succeeded'))
+    const wrapper = mountHistory(runs, 'e')
+    const rows = wrapper.findAll('li button')
+
+    expect(rows).toHaveLength(4)
+    expect(rows[3]!.attributes('aria-current')).toBe('true')
+    expect(wrapper.get('[aria-controls]').text()).toContain('Show 1 more')
+  })
+
+  it('points the toggle at the list it controls', () => {
+    const wrapper = mountHistory(['a', 'b', 'c', 'd'].map((id) => makeRun(id, 'succeeded')))
+    const listId = wrapper.get('ul').attributes('id')
+
+    expect(listId).toBeTruthy()
+    expect(wrapper.get('[aria-controls]').attributes('aria-controls')).toBe(listId)
+  })
 })

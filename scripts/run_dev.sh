@@ -8,7 +8,7 @@ set -euo pipefail
 #   ./scripts/run_dev.sh           # mcp + bot + ui
 #   ./scripts/run_dev.sh mcp       # MCP server only
 #   ./scripts/run_dev.sh bot       # bot only
-#   ./scripts/run_dev.sh ui        # MCP server + UI at http://127.0.0.1:8090
+#   ./scripts/run_dev.sh ui        # MCP server + UI with hot reload at http://localhost:5174
 
 # --- config ---
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -41,3 +41,11 @@ cd "$REPO_ROOT"
 
 echo "==> Starting dev environment (services: ${ARG})..."
 docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_ENV" $PROFILES up --build -d
+
+if [ "$ARG" = "ui" ]; then
+  command -v bun >/dev/null || { echo "bun is required for the Vite dev server" >&2; exit 1; }
+  cd "$REPO_ROOT/ui"
+  [ -d node_modules ] || bun install --frozen-lockfile
+  echo "==> Starting Vite dev server at http://localhost:5174 (Ctrl+C stops Vite only, containers keep running)..."
+  exec bun run dev
+fi

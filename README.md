@@ -446,14 +446,13 @@ Then run `/mcp` to list available servers and tools. The MCP server exposes:
 Web control panel for this repo: run scrapes, see results, edit config, and watch
 live logs. It does not depend on the job-agent frontend or backend.
 
-Start it in dev, then open http://127.0.0.1:8090:
+Start it in dev with Vue hot reload, then open http://localhost:5174:
 
     ./scripts/run_dev.sh ui
 
-For Vue hot reload, keep the stack running and start Vite, then open
-http://localhost:5174:
-
-    cd ui && bun install && bun run dev
+This starts `scraper-mcp` and `scraper-ui` in Docker, then runs the Vite dev server in
+the foreground. Ctrl+C stops Vite only, the containers keep running.
+http://127.0.0.1:8090 serves the UI baked into the image, so it only changes after a rebuild.
 
 - Runs go through `scraper-mcp`, one at a time, with no stop button
 - Each run is saved to `output/ui-runs/<run_id>/`, last 50 kept, and never to Mongo

@@ -132,6 +132,59 @@ describe('ConfigPage', () => {
     expect(wrapper.text()).toContain('Version 3')
   })
 
+  it('shows only the latest 3 older versions until Show more is pressed', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    getConfigHistory.execute.mockResolvedValue(
+      [8, 7, 6, 5, 4].map((version) => ({ ...VERSION, version })),
+    )
+    const wrapper = mountPage()
+    await flushPromises()
+    const toggle = wrapper.get('[aria-controls]')
+    const versionRows = () => wrapper.findAll(`[id="${toggle.attributes('aria-controls')}"] li`)
+
+    expect(versionRows()).toHaveLength(3)
+    expect(wrapper.text()).toContain('Version 6')
+    expect(wrapper.text()).not.toContain('Version 5')
+    expect(toggle.text()).toContain('Show 2 more')
+
+    await toggle.trigger('click')
+
+    expect(versionRows()).toHaveLength(5)
+    expect(toggle.text()).toContain('Show less')
+
+    await toggle.trigger('click')
+
+    expect(versionRows()).toHaveLength(3)
+  })
+
+  it('drops a pending restore when its row is collapsed away', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    getConfigHistory.execute.mockResolvedValue(
+      [8, 7, 6, 5].map((version) => ({ ...VERSION, version })),
+    )
+    const wrapper = mountPage()
+    await flushPromises()
+    const toggle = wrapper.get('[aria-controls]')
+
+    await toggle.trigger('click')
+    const restoreButtons = wrapper.findAll('button').filter((button) => button.text() === 'Restore')
+    await restoreButtons[3]!.trigger('click')
+    expect(wrapper.text()).toContain('Confirm restore')
+
+    await toggle.trigger('click')
+    await toggle.trigger('click')
+
+    expect(wrapper.text()).not.toContain('Confirm restore')
+  })
+
+  it('hides the Show more toggle when there are 3 or fewer older versions', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('[aria-controls]').exists()).toBe(false)
+  })
+
   it('shows a placeholder in each empty box of the global section', async () => {
     getConfig.execute.mockResolvedValue({
       ...SNAPSHOT,
