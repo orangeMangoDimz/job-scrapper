@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import type { DiscordChannel, DiscordSettings } from '@/modules/discord/domain/entities/Discord'
 import DiscordPage from '@/modules/discord/presentation/pages/DiscordPage.vue'
 import { provideDiscordUseCases } from '@/modules/discord/presentation/stores/discordUseCases'
+import { useDiscordComposeStore } from '@/modules/discord/presentation/stores/useDiscordComposeStore'
 import type { RunDetail, RunRecord } from '@/modules/runs/domain/entities/Run'
 import { provideRunUseCases } from '@/modules/runs/presentation/stores/runUseCases'
+import { useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
 import { Select } from '@/shared/components/ui/select'
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }))
@@ -89,7 +91,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 async function mountPage() {
   const wrapper = mount(DiscordPage, {
-    global: { plugins: [createPinia()], stubs: { RouterLink: RouterLinkStub } },
+    global: { plugins: [createPinia()] },
     attachTo: document.body,
   })
   await flushPromises()
@@ -162,15 +164,64 @@ describe('DiscordPage', () => {
     expect(wrapper.find('form').exists()).toBe(true)
   })
 
-  it('shows the not configured empty state with a link to config', async () => {
+  it('shows only the bot settings and a hint when the bot is not set up', async () => {
     getSettings.execute.mockResolvedValue({ ...SETTINGS, isConfigured: false, tokenHint: null })
     const wrapper = await mountPage()
 
-    const empty = wrapper.get('[data-slot="empty-state"]')
-    expect(empty.text()).toContain('Set up Discord in Config first')
-    expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe('/config')
-    expect(wrapper.find('form').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Save a bot token below to start sending messages')
+    expect(wrapper.find('#discord-token').exists()).toBe(true)
+    expect(wrapper.find('#discord-channel').exists()).toBe(false)
     expect(listChannels.execute).not.toHaveBeenCalled()
+  })
+
+  it('shows the send form right after the first bot settings save', async () => {
+    getSettings.execute.mockResolvedValue({ ...SETTINGS, isConfigured: false, tokenHint: null })
+    saveSettings.execute.mockResolvedValue(SETTINGS)
+    const wrapper = await mountPage()
+
+    await wrapper.get('#discord-token').setValue('new-token')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(listChannels.execute).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('#discord-channel').exists()).toBe(true)
+  })
+
+  it('puts the bot settings below the send form', async () => {
+    const wrapper = await mountPage()
+
+    const forms = wrapper.findAll('form')
+    expect(forms).toHaveLength(2)
+    expect(forms[0]!.find('#discord-channel').exists()).toBe(true)
+    expect(forms[1]!.find('#discord-token').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Bot settings')
+  })
+
+  it('reloads the channels when the bot settings are saved again', async () => {
+    saveSettings.execute.mockResolvedValue({ ...SETTINGS, mentionUserId: null })
+    const wrapper = await mountPage()
+
+    await wrapper.findAll('form')[1]!.trigger('submit')
+    await flushPromises()
+
+    expect(listChannels.execute).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('#discord-mention').exists()).toBe(false)
+  })
+
+  it('picks up new runs from the Runs section without a reload', async () => {
+    await mountPage()
+    const newRun: RunRecord = { ...RUN, id: 'r2', jobCount: 5 }
+
+    useRunStore().runs = [newRun, RUN]
+    await flushPromises()
+
+    expect(useDiscordComposeStore().sendableRuns.map((run) => run.id)).toEqual(['r2', 'r1'])
+  })
+
+  it('loads the settings once on mount', async () => {
+    await mountPage()
+
+    expect(getSettings.execute).toHaveBeenCalledTimes(1)
   })
 
   it('shows an error with a retry when the channels fail', async () => {

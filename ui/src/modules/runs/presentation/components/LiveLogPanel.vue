@@ -16,7 +16,7 @@ watch(lines, async () => {
 </script>
 
 <template>
-  <PageSection title="Live logs" description="Output from the scraper as it runs">
+  <PageSection title="Live logs">
     <template #actions>
       <Badge :tone="isConnected ? 'accent' : 'neutral'">
         <span

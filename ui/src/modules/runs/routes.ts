@@ -20,7 +20,6 @@ provideRunUseCases({
 export const runRoutes: RouteRecordRaw[] = [
   {
     path: '/runs',
-    name: 'runs',
-    component: () => import('@/modules/runs/presentation/pages/RunsPage.vue'),
+    redirect: { path: '/', hash: '#runs' },
   },
 ]

@@ -52,12 +52,12 @@ function mountPage() {
 function historyRows(wrapper: ReturnType<typeof mountPage>) {
   const history = wrapper
     .findAll('section')
-    .find((section) => section.get('h2').text() === 'History')
+    .find((section) => section.get('h3').text() === 'History')
   return history?.findAll('li button') ?? []
 }
 
 function keywordInput(wrapper: ReturnType<typeof mountPage>): HTMLInputElement {
-  return wrapper.get('#keywords').element as HTMLInputElement
+  return wrapper.get('#run-keywords').element as HTMLInputElement
 }
 
 describe('RunsPage', () => {
@@ -81,7 +81,7 @@ describe('RunsPage', () => {
 
     expect(wrapper.text()).toContain('Loading run options')
     expect(wrapper.text()).toContain('Loading run history')
-    expect(wrapper.find('#keywords').exists()).toBe(false)
+    expect(wrapper.find('#run-keywords').exists()).toBe(false)
 
     options.resolve(OPTIONS)
     await flushPromises()
@@ -96,7 +96,7 @@ describe('RunsPage', () => {
     listRuns.execute.mockResolvedValueOnce([RUN])
     const wrapper = mountPage()
     await flushPromises()
-    await wrapper.get('#keywords').setValue('django, vue')
+    await wrapper.get('#run-keywords').setValue('django, vue')
 
     getOptions.execute.mockReturnValueOnce(deferred<RunOptions>().promise)
     listRuns.execute.mockReturnValueOnce(deferred<RunRecord[]>().promise)
@@ -149,7 +149,7 @@ describe('RunsPage', () => {
     await historyRows(wrapper)[0]!.trigger('click')
     await flushPromises()
 
-    const headings = wrapper.findAll('section h2').map((heading) => heading.text())
+    const headings = wrapper.findAll('section h3').map((heading) => heading.text())
 
     expect(headings).toEqual(['Start a run', 'Results', 'History', 'Live logs'])
   })
@@ -160,7 +160,7 @@ describe('RunsPage', () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    const headings = wrapper.findAll('section h2').map((heading) => heading.text())
+    const headings = wrapper.findAll('section h3').map((heading) => heading.text())
 
     expect(headings).toEqual(['Start a run', 'History', 'Live logs'])
   })

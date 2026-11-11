@@ -19,7 +19,7 @@ const emit = defineEmits<{
   <div v-if="isError" class="flex flex-1 flex-col items-center justify-center self-stretch">
     <div role="alert" class="flex max-w-reading flex-col items-center gap-2 text-center">
       <CircleAlert class="size-5 text-ink-muted" aria-hidden="true" />
-      <h2 class="text-heading text-ink">{{ errorTitle }}</h2>
+      <h3 class="text-heading text-ink">{{ errorTitle }}</h3>
       <p v-if="errorMessage" class="text-body-sm text-ink-muted">{{ errorMessage }}</p>
       <Button variant="primary" class="mt-4" @click="emit('retry')">Try again</Button>
     </div>

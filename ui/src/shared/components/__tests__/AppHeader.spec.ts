@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import { navGroups } from '@/router/navigation'
-import AppSidebar from '@/shared/components/AppSidebar.vue'
-import { SidebarProvider } from '@/shared/components/ui/sidebar'
+import { navItems } from '@/router/navigation'
+import AppHeader from '@/shared/components/AppHeader.vue'
 import { useThemeStore } from '@/shared/stores/useThemeStore'
 
 function stubBrowser(): void {
@@ -31,31 +29,17 @@ function stubBrowser(): void {
   )
 }
 
-async function mountSidebar(path: string, canSignOut = true) {
+async function mountHeader(canSignOut = true) {
   stubBrowser()
-  const blank = { render: () => null }
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: '/runs', component: blank },
-      { path: '/config', component: blank },
-      { path: '/discord', component: blank },
-    ],
+    routes: [{ path: '/', component: { render: () => null } }],
   })
-  router.push(path)
+  router.push('/')
   await router.isReady()
 
-  const Host = defineComponent({
-    emits: ['signOut'],
-    setup(_, { emit }) {
-      return () =>
-        h(SidebarProvider, null, () =>
-          h(AppSidebar, { groups: navGroups, canSignOut, onSignOut: () => emit('signOut') }),
-        )
-    },
-  })
-
-  const wrapper = mount(Host, {
+  const wrapper = mount(AppHeader, {
+    props: { items: navItems, canSignOut },
     global: { plugins: [router, createPinia()] },
     attachTo: document.body,
   })
@@ -77,41 +61,58 @@ function menuRows(menu: HTMLElement): (string | undefined)[] {
   )
 }
 
-describe('AppSidebar', () => {
+describe('AppHeader', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     document.body.innerHTML = ''
   })
 
   it('shows the NoNo Scraper wordmark', async () => {
-    const wrapper = await mountSidebar('/runs')
+    const wrapper = await mountHeader()
 
-    expect(wrapper.get('[data-slot="sidebar-header"]').text()).toContain('NoNo Scraper')
+    expect(wrapper.get('[data-slot="app-header"]').text()).toContain('NoNo Scraper')
   })
 
-  it('links to Runs, Config and Discord inside the Main navigation', async () => {
-    const wrapper = await mountSidebar('/runs')
+  it('links to the Runs, Config and Discord sections inside the Main navigation', async () => {
+    const wrapper = await mountHeader()
     const nav = wrapper.get('nav[aria-label="Main"]')
 
     expect(nav.findAll('a').map((link) => link.attributes('href'))).toEqual([
-      '/runs',
-      '/config',
-      '/discord',
+      '/#runs',
+      '/#config',
+      '/#discord',
     ])
     expect(nav.text()).toContain('Runs')
     expect(nav.text()).toContain('Config')
     expect(nav.text()).toContain('Discord')
   })
 
-  it('marks only the link for the current page', async () => {
-    const wrapper = await mountSidebar('/config')
+  it('never marks a section link as the current page', async () => {
+    const wrapper = await mountHeader()
 
-    expect(wrapper.get('a[href="/config"]').attributes('aria-current')).toBe('page')
-    expect(wrapper.get('a[href="/runs"]').attributes('aria-current')).toBeUndefined()
+    const values = wrapper
+      .get('nav[aria-label="Main"]')
+      .findAll('a')
+      .map((link) => link.attributes('aria-current'))
+    expect(values).toEqual(['false', 'false', 'false'])
   })
 
-  it('labels the footer menu Admin', async () => {
-    const wrapper = await mountSidebar('/runs')
+  it('names the product in the only h1', async () => {
+    const wrapper = await mountHeader()
+
+    expect(wrapper.findAll('h1').map((heading) => heading.text())).toEqual(['NoNo Scraper'])
+  })
+
+  it('gives the Admin trigger one accessible name', async () => {
+    const wrapper = await mountHeader()
+
+    const trigger = wrapper.get('[data-slot="dropdown-menu-trigger"]')
+    expect(trigger.attributes('aria-label')).toBe('Admin menu')
+    expect(trigger.find('.sr-only').exists()).toBe(false)
+  })
+
+  it('labels the account menu Admin', async () => {
+    const wrapper = await mountHeader()
     const trigger = wrapper.get('[data-slot="dropdown-menu-trigger"]')
 
     expect(trigger.text()).toContain('Admin')
@@ -119,14 +120,14 @@ describe('AppSidebar', () => {
   })
 
   it('offers the theme options and Sign out in the Admin menu', async () => {
-    await mountSidebar('/runs')
+    await mountHeader()
     const menu = await openAdminMenu()
 
     expect(menuRows(menu)).toEqual(['Light', 'Dark', 'System', 'Sign out'])
   })
 
   it('leaves Sign out out of the menu when sign-in is turned off', async () => {
-    await mountSidebar('/runs', false)
+    await mountHeader(false)
     const menu = await openAdminMenu()
 
     expect(menuRows(menu)).toEqual(['Light', 'Dark', 'System'])
@@ -134,7 +135,7 @@ describe('AppSidebar', () => {
   })
 
   it('sets the theme chosen from the Admin menu', async () => {
-    await mountSidebar('/runs')
+    await mountHeader()
     const menu = await openAdminMenu()
     const dark = [...menu.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
       (option) => option.textContent?.trim() === 'Dark',
@@ -147,7 +148,7 @@ describe('AppSidebar', () => {
   })
 
   it('asks for confirmation before emitting signOut', async () => {
-    const wrapper = await mountSidebar('/runs')
+    const wrapper = await mountHeader()
     const menu = await openAdminMenu()
     const signOut = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
       (item) => item.textContent?.trim() === 'Sign out',

@@ -6,9 +6,3 @@ export interface NavItem {
   icon: Component
   to: string
 }
-
-export interface NavGroup {
-  id: string
-  label?: string
-  items: NavItem[]
-}

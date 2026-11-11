@@ -21,7 +21,7 @@ onBeforeUnmount(() => store.stopPolling())
 
 <template>
   <header class="flex flex-wrap items-start justify-between gap-3">
-    <h1 class="min-w-0 text-title text-ink">Runs</h1>
+    <h2 id="runs-heading" class="min-w-0 text-title text-ink">Runs</h2>
   </header>
 
   <div class="flex min-w-0 flex-col gap-6 md:gap-4">
@@ -33,7 +33,7 @@ onBeforeUnmount(() => store.stopPolling())
       The scraper is busy, so this list may be out of date
     </p>
 
-    <PageSection title="Start a run" description="Pick keywords and sites, then scrape them now">
+    <PageSection title="Start a run">
       <div
         v-if="store.status === 'error'"
         role="alert"
@@ -66,7 +66,7 @@ onBeforeUnmount(() => store.stopPolling())
 
     <RunResults v-if="store.selected" :detail="store.selected" />
 
-    <PageSection v-if="showsHistory" title="History" description="Pick a run to see its results">
+    <PageSection v-if="showsHistory" title="History">
       <div v-if="isFirstLoad" role="status" aria-busy="true" class="flex flex-col gap-4 md:gap-3">
         <span class="sr-only">Loading run history</span>
         <Skeleton v-for="index in 3" :key="index" class="h-24 w-full rounded-md" />

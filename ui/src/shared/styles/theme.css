@@ -83,14 +83,6 @@
   --color-border: var(--line);
   --color-input: var(--line-strong);
   --color-ring: var(--accent);
-  --color-sidebar: var(--surface-subtle);
-  --color-sidebar-foreground: var(--ink);
-  --color-sidebar-primary: var(--accent);
-  --color-sidebar-primary-foreground: var(--on-accent);
-  --color-sidebar-accent: var(--accent-soft);
-  --color-sidebar-accent-foreground: var(--accent);
-  --color-sidebar-border: var(--line);
-  --color-sidebar-ring: var(--accent);
 }
 
 @theme inline reference {
@@ -130,48 +122,6 @@
   );
   background-size: 300% 100%;
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
-}
-
-/* Sidebar rail: content fades and is clipped while the width animates, never
-   toggled with display, so the icons do not jump mid-animation. */
-@utility sidebar-fade {
-  white-space: nowrap;
-  transition: opacity 150ms ease-out 80ms;
-
-  [data-collapsible='icon'] & {
-    opacity: 0;
-    pointer-events: none;
-    transition-delay: 0ms;
-  }
-}
-
-/* Sidebar rail: content that has no place on the rail folds its height away
-   with the width animation instead of disappearing at once. */
-@utility sidebar-collapse {
-  display: grid;
-  grid-template-rows: 1fr;
-  visibility: visible;
-  transition:
-    grid-template-rows 220ms ease-out,
-    opacity 150ms ease-out 80ms,
-    visibility 0s;
-
-  & > * {
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  /* Hidden from assistive tech once folded, as display: none was before. */
-  [data-collapsible='icon'] & {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition:
-      grid-template-rows 220ms ease-out,
-      opacity 150ms ease-out,
-      visibility 0s 220ms;
-  }
 }
 
 @utility text-shimmer {
