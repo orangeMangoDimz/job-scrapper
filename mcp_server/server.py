@@ -16,6 +16,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from mcp_server import mongo
+from mcp_server.config_path import DEFAULT_CONFIG_PATH
+from mcp_server.discord_tools import DISCORD_TOOLS
 from scraper.api.locations import location_options_payload
 from scraper.config import ACCEPT_LANGUAGE, USER_AGENT
 from scraper.config_loader import AppConfig, ConfigError, keyword_slug
@@ -32,7 +34,6 @@ from scraper.log import redact_proxy_url as _redact_proxy_url
 from scraper.runner import run as run_scraper
 from scraper.types import JOB_FIELD_ORDER, MANDATORY_FIELDS
 
-DEFAULT_CONFIG_PATH = Path(os.environ.get("SCRAPER_CONFIG", "config.yaml"))
 DEFAULT_PROXY_TEST_URL = os.environ.get(
     "PROXY_TEST_URL",
     "https://api.ipify.org?format=json",
@@ -46,6 +47,9 @@ _STATUS_PATH = Path("logs/status.json")
 _LOG_PATH = Path("logs/scraper.log")
 
 mcp = FastMCP("job-scraper", host=HOST, port=PORT)
+
+for discord_tool in DISCORD_TOOLS:
+    mcp.tool()(discord_tool)
 
 SaveSource = Literal["ui", "mcp"]
 
