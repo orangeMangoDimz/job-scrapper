@@ -42,11 +42,15 @@ async function save(): Promise<void> {
   }
 }
 
-onMounted(() => void store.load())
+onMounted(() => {
+  if (store.settings === null) {
+    void store.load()
+  }
+})
 </script>
 
 <template>
-  <PageSection title="Discord">
+  <PageSection title="Bot settings">
     <PageLoadState
       v-if="form === null"
       :is-error="store.status === 'error'"

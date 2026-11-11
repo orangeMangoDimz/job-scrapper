@@ -8,7 +8,6 @@ import JobFieldsInput from '@/modules/config/presentation/components/JobFieldsIn
 import ListInput from '@/modules/config/presentation/components/ListInput.vue'
 import SiteSettings from '@/modules/config/presentation/components/SiteSettings.vue'
 import { useConfigStore } from '@/modules/config/presentation/stores/useConfigStore'
-import DiscordSettingsSection from '@/modules/discord/presentation/components/DiscordSettingsSection.vue'
 import PageLoadState from '@/shared/components/PageLoadState.vue'
 import PageSection from '@/shared/components/PageSection.vue'
 import { Button } from '@/shared/components/ui/button'
@@ -174,7 +173,5 @@ onMounted(() => {
         </Button>
       </div>
     </form>
-
-    <DiscordSettingsSection />
   </div>
 </template>

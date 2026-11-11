@@ -5,18 +5,11 @@ import { createPinia } from 'pinia'
 import { EMPTY_FILTER, type ConfigSnapshot } from '@/modules/config/domain/entities/ScraperConfig'
 import ConfigPage from '@/modules/config/presentation/pages/ConfigPage.vue'
 import { provideConfigUseCases } from '@/modules/config/presentation/stores/configUseCases'
-import { provideDiscordUseCases } from '@/modules/discord/presentation/stores/discordUseCases'
 
 const getConfig = { execute: vi.fn() }
 const saveConfig = { execute: vi.fn() }
 const getConfigHistory = { execute: vi.fn() }
 const restoreConfig = { execute: vi.fn() }
-const getDiscordSettings = { execute: vi.fn() }
-const saveDiscordSettings = { execute: vi.fn() }
-const testDiscordConnection = { execute: vi.fn() }
-const listDiscordChannels = { execute: vi.fn() }
-const previewDiscordMessage = { execute: vi.fn() }
-const sendDiscordMessage = { execute: vi.fn() }
 
 const SNAPSHOT: ConfigSnapshot = {
   values: {
@@ -69,23 +62,6 @@ describe('ConfigPage', () => {
     vi.resetAllMocks()
     getConfigHistory.execute.mockResolvedValue([VERSION])
     provideConfigUseCases({ getConfig, saveConfig, getConfigHistory, restoreConfig })
-    getDiscordSettings.execute.mockResolvedValue({
-      isConfigured: true,
-      tokenHint: '••••1234',
-      defaultChannelId: null,
-      mentionUserId: null,
-      messageTemplate: '{title}',
-      maxChars: 1900,
-      updatedAt: null,
-    })
-    provideDiscordUseCases({
-      getSettings: getDiscordSettings,
-      saveSettings: saveDiscordSettings,
-      testConnection: testDiscordConnection,
-      listChannels: listDiscordChannels,
-      previewMessage: previewDiscordMessage,
-      sendMessage: sendDiscordMessage,
-    })
   })
 
   afterEach(() => {
@@ -258,38 +234,5 @@ describe('ConfigPage', () => {
     expect(wrapper.find('#glints-api-locations').exists()).toBe(true)
     expect(wrapper.find('#upwork-api-locations').exists()).toBe(false)
     vi.unstubAllGlobals()
-  })
-
-  it('shows a Discord section with its own form, apart from the config form', async () => {
-    getConfig.execute.mockResolvedValue(SNAPSHOT)
-    const wrapper = mountPage()
-    await flushPromises()
-
-    const forms = wrapper.findAll('form')
-    expect(forms).toHaveLength(2)
-    expect(forms[0]!.find('#discord-token').exists()).toBe(false)
-    expect(forms[1]!.find('#discord-token').exists()).toBe(true)
-    expect(forms[1]!.text()).toContain('Test connection')
-  })
-
-  it('saves Discord settings without saving the config', async () => {
-    getConfig.execute.mockResolvedValue(SNAPSHOT)
-    saveDiscordSettings.execute.mockResolvedValue({
-      isConfigured: true,
-      tokenHint: '••••1234',
-      defaultChannelId: null,
-      mentionUserId: null,
-      messageTemplate: '{title}',
-      maxChars: 1900,
-      updatedAt: null,
-    })
-    const wrapper = mountPage()
-    await flushPromises()
-
-    await wrapper.findAll('form')[1]!.trigger('submit')
-    await flushPromises()
-
-    expect(saveDiscordSettings.execute).toHaveBeenCalledTimes(1)
-    expect(saveConfig.execute).not.toHaveBeenCalled()
   })
 })

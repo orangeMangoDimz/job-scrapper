@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { MAX_MESSAGE_CHARS, toSendSummary } from '@/modules/discord/domain/entities/Discord'
 import DiscordJobPicker from '@/modules/discord/presentation/components/DiscordJobPicker.vue'
 import DiscordMessagePreview from '@/modules/discord/presentation/components/DiscordMessagePreview.vue'
 import DiscordSendResults from '@/modules/discord/presentation/components/DiscordSendResults.vue'
+import DiscordSettingsSection from '@/modules/discord/presentation/components/DiscordSettingsSection.vue'
 import {
   useDiscordComposeStore,
   type DiscordMode,
 } from '@/modules/discord/presentation/stores/useDiscordComposeStore'
 import { useDiscordSettingsStore } from '@/modules/discord/presentation/stores/useDiscordSettingsStore'
 import { useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
-import EmptyState from '@/shared/components/EmptyState.vue'
 import PageLoadState from '@/shared/components/PageLoadState.vue'
 import PageSection from '@/shared/components/PageSection.vue'
 import { Button } from '@/shared/components/ui/button'
@@ -68,12 +67,19 @@ function loadCompose(): Promise<void> {
   return settings.value === null ? Promise.resolve() : compose.load(settings.value)
 }
 
-async function loadPage(): Promise<void> {
-  await settingsStore.load()
-  if (isConfigured.value) {
-    await loadCompose()
-  }
+function loadPage(): Promise<void> {
+  return settingsStore.load()
 }
+
+watch(
+  settings,
+  () => {
+    if (isConfigured.value) {
+      void loadCompose()
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   () => runStore.runs,
@@ -123,17 +129,9 @@ onMounted(() => void loadPage())
     </div>
   </PageLoadState>
 
-  <EmptyState
-    v-else-if="!isConfigured"
-    title="Set up Discord in Config first"
-    hint="Save a bot token there, then come back to send messages"
-  >
-    <template #action>
-      <Button as-child variant="primary">
-        <RouterLink to="/#config">Go to Config</RouterLink>
-      </Button>
-    </template>
-  </EmptyState>
+  <p v-else-if="!isConfigured" role="status" class="text-body-sm text-ink-muted">
+    Save a bot token below to start sending messages
+  </p>
 
   <PageLoadState
     v-else-if="compose.status === 'error' || isComposePending"
@@ -265,4 +263,6 @@ onMounted(() => void loadPage())
       </Button>
     </div>
   </form>
+
+  <DiscordSettingsSection v-if="settings !== null" />
 </template>
