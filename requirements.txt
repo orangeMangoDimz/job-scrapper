@@ -11,3 +11,4 @@ dateparser>=1.2.0
 pytest>=8.0
 mongomock>=4.3
 markdownify>=1.2.0
+discord.py>=2.4.0,<3

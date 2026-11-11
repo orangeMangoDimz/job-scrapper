@@ -47,4 +47,30 @@ describe('HttpClient', () => {
 
     expect((error as ApiError).status).toBe(0)
   })
+
+  it('waits 15 seconds by default', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(200, { success: true, data: null }))
+    const client = new HttpClient('/api', fetchFn)
+
+    await client.get('/runs')
+
+    expect(timeout).toHaveBeenCalledWith(15_000)
+    timeout.mockRestore()
+  })
+
+  it('waits as long as a request asks for', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    const fetchFn = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(jsonResponse(200, { success: true, data: null })))
+    const client = new HttpClient('/api', fetchFn)
+
+    await client.get('/a', 40_000)
+    await client.post('/b', { x: 1 }, 50_000)
+    await client.put('/c', { x: 1 }, 60_000)
+
+    expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([40_000, 50_000, 60_000])
+    timeout.mockRestore()
+  })
 })
