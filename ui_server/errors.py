@@ -61,6 +61,21 @@ class TooManyAttemptsError(AppError):
     default_message = "Too many tries. Try again in a few minutes."
 
 
+class DiscordNotConfiguredError(AppError):
+    status_code = 409
+    default_message = "Set up Discord in Config first."
+
+
+class DiscordUnauthorizedError(AppError):
+    status_code = 422
+    default_message = "Discord rejected the bot token."
+
+
+class DiscordForbiddenError(AppError):
+    status_code = 422
+    default_message = "The bot can't post in that channel."
+
+
 class McpUnavailableError(AppError):
     status_code = 503
     default_message = "The scraper service could not be reached."
