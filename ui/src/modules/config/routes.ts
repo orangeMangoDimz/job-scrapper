@@ -20,7 +20,6 @@ provideConfigUseCases({
 export const configRoutes: RouteRecordRaw[] = [
   {
     path: '/config',
-    name: 'config',
-    component: () => import('@/modules/config/presentation/pages/ConfigPage.vue'),
+    redirect: { path: '/', hash: '#config' },
   },
 ]

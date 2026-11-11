@@ -24,7 +24,6 @@ provideDiscordUseCases({
 export const discordRoutes: RouteRecordRaw[] = [
   {
     path: '/discord',
-    name: 'discord',
-    component: () => import('@/modules/discord/presentation/pages/DiscordPage.vue'),
+    redirect: { path: '/', hash: '#discord' },
   },
 ]

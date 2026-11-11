@@ -50,7 +50,7 @@ onMounted(() => {
 <template>
   <header class="flex flex-wrap items-start justify-between gap-3">
     <div class="flex min-w-0 flex-col gap-1">
-      <h1 class="text-title text-ink">Config</h1>
+      <h2 id="config-heading" class="text-title text-ink">Config</h2>
       <p v-if="store.snapshot" class="text-body-sm text-ink-muted">
         Version {{ store.snapshot.version }}, saved {{ savedAt }} by {{ store.snapshot.updatedBy }}.
         Changes apply from the next run

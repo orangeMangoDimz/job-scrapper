@@ -16,7 +16,7 @@ async function submit(): Promise<void> {
   const isDone = await auth.login(password.value)
   isSubmitting.value = false
   if (isDone) {
-    await router.push('/runs')
+    await router.push('/')
   }
 }
 </script>

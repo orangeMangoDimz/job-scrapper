@@ -4,8 +4,10 @@ import { createPinia } from 'pinia'
 import type { DiscordChannel, DiscordSettings } from '@/modules/discord/domain/entities/Discord'
 import DiscordPage from '@/modules/discord/presentation/pages/DiscordPage.vue'
 import { provideDiscordUseCases } from '@/modules/discord/presentation/stores/discordUseCases'
+import { useDiscordComposeStore } from '@/modules/discord/presentation/stores/useDiscordComposeStore'
 import type { RunDetail, RunRecord } from '@/modules/runs/domain/entities/Run'
 import { provideRunUseCases } from '@/modules/runs/presentation/stores/runUseCases'
+import { useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
 import { Select } from '@/shared/components/ui/select'
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }))
@@ -168,9 +170,19 @@ describe('DiscordPage', () => {
 
     const empty = wrapper.get('[data-slot="empty-state"]')
     expect(empty.text()).toContain('Set up Discord in Config first')
-    expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe('/config')
+    expect(wrapper.getComponent(RouterLinkStub).props('to')).toBe('/#config')
     expect(wrapper.find('form').exists()).toBe(false)
     expect(listChannels.execute).not.toHaveBeenCalled()
+  })
+
+  it('picks up new runs from the Runs section without a reload', async () => {
+    await mountPage()
+    const newRun: RunRecord = { ...RUN, id: 'r2', jobCount: 5 }
+
+    useRunStore().runs = [newRun, RUN]
+    await flushPromises()
+
+    expect(useDiscordComposeStore().sendableRuns.map((run) => run.id)).toEqual(['r2', 'r1'])
   })
 
   it('shows an error with a retry when the channels fail', async () => {

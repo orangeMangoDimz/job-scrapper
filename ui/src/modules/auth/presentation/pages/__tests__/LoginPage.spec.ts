@@ -16,7 +16,7 @@ async function mountLogin() {
     history: createMemoryHistory(),
     routes: [
       { path: '/login', component: LoginPage },
-      { path: '/runs', component: blank },
+      { path: '/', component: blank },
     ],
   })
   router.push('/login')
@@ -98,6 +98,6 @@ describe('LoginPage', () => {
     await flushPromises()
 
     expect(login.execute).toHaveBeenCalledWith('secret')
-    expect(router.currentRoute.value.path).toBe('/runs')
+    expect(router.currentRoute.value.path).toBe('/')
   })
 })

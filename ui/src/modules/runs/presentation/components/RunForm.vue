@@ -38,10 +38,10 @@ function setSite(name: string, isPicked: boolean | 'indeterminate'): void {
 <template>
   <form class="flex flex-col gap-4" @submit.prevent="emit('start', keywords, pickedSites)">
     <div class="flex flex-col gap-2">
-      <Label for="keywords">Keywords, separated by commas</Label>
+      <Label for="run-keywords">Keywords, separated by commas</Label>
       <div class="flex flex-col gap-3 sm:flex-row">
         <Input
-          id="keywords"
+          id="run-keywords"
           v-model="keywordText"
           placeholder="data analyst, python"
           class="sm:flex-1"

@@ -1,0 +1,100 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+import { useConfigStore } from '@/modules/config/presentation/stores/useConfigStore'
+import { configRoutes } from '@/modules/config/routes'
+import { useDiscordSettingsStore } from '@/modules/discord/presentation/stores/useDiscordSettingsStore'
+import { discordRoutes } from '@/modules/discord/routes'
+import HomePage from '@/modules/home/presentation/pages/HomePage.vue'
+import { useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
+import { runRoutes } from '@/modules/runs/routes'
+
+const PAGE_STUBS = {
+  RunsPage: { template: '<h2 id="runs-heading">Runs</h2>' },
+  ConfigPage: { template: '<h2 id="config-heading">Config</h2>' },
+  DiscordPage: { template: '<h2 id="discord-heading">Discord</h2>' },
+}
+
+async function mountHome(path: string) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', component: HomePage }],
+  })
+  router.push(path)
+  await router.isReady()
+  const wrapper = mount(HomePage, {
+    global: { plugins: [router, pinia], stubs: PAGE_STUBS },
+    attachTo: document.body,
+  })
+  await flushPromises()
+  return wrapper
+}
+
+function settleLoads(): void {
+  useRunStore().status = 'ready'
+  useConfigStore().status = 'ready'
+  useDiscordSettingsStore().status = 'error'
+}
+
+describe('HomePage', () => {
+  const scrollIntoView = vi.fn<Element['scrollIntoView']>()
+
+  beforeEach(() => {
+    scrollIntoView.mockReset()
+    Element.prototype.scrollIntoView = scrollIntoView
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('stacks Runs, Config and Discord as named sections in that order', async () => {
+    const wrapper = await mountHome('/')
+
+    const sections = wrapper.findAll('[data-slot="home-section"]')
+    expect(sections.map((section) => section.attributes('id'))).toEqual([
+      'runs',
+      'config',
+      'discord',
+    ])
+    expect(sections.map((section) => section.attributes('aria-labelledby'))).toEqual([
+      'runs-heading',
+      'config-heading',
+      'discord-heading',
+    ])
+  })
+
+  it('scrolls to the linked section once the first loads settle', async () => {
+    await mountHome('/#discord')
+    expect(scrollIntoView).not.toHaveBeenCalled()
+
+    settleLoads()
+    await flushPromises()
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView.mock.contexts[0]).toBe(document.getElementById('discord'))
+  })
+
+  it('does not scroll when there is no hash', async () => {
+    await mountHome('/')
+
+    settleLoads()
+    await flushPromises()
+
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+})
+
+describe('old page routes', () => {
+  it('send /runs, /config and /discord to their section on the single page', () => {
+    expect([...runRoutes, ...configRoutes, ...discordRoutes]).toEqual([
+      expect.objectContaining({ path: '/runs', redirect: { path: '/', hash: '#runs' } }),
+      expect.objectContaining({ path: '/config', redirect: { path: '/', hash: '#config' } }),
+      expect.objectContaining({ path: '/discord', redirect: { path: '/', hash: '#discord' } }),
+    ])
+  })
+})

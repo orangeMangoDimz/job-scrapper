@@ -21,7 +21,7 @@ onBeforeUnmount(() => store.stopPolling())
 
 <template>
   <header class="flex flex-wrap items-start justify-between gap-3">
-    <h1 class="min-w-0 text-title text-ink">Runs</h1>
+    <h2 id="runs-heading" class="min-w-0 text-title text-ink">Runs</h2>
   </header>
 
   <div class="flex min-w-0 flex-col gap-6 md:gap-4">

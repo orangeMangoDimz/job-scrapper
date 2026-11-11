@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { MAX_MESSAGE_CHARS, toSendSummary } from '@/modules/discord/domain/entities/Discord'
@@ -11,6 +11,7 @@ import {
   type DiscordMode,
 } from '@/modules/discord/presentation/stores/useDiscordComposeStore'
 import { useDiscordSettingsStore } from '@/modules/discord/presentation/stores/useDiscordSettingsStore'
+import { useRunStore } from '@/modules/runs/presentation/stores/useRunStore'
 import EmptyState from '@/shared/components/EmptyState.vue'
 import PageLoadState from '@/shared/components/PageLoadState.vue'
 import PageSection from '@/shared/components/PageSection.vue'
@@ -38,6 +39,7 @@ const MODES = Object.keys(MODE_LABELS) as DiscordMode[]
 
 const settingsStore = useDiscordSettingsStore()
 const compose = useDiscordComposeStore()
+const runStore = useRunStore()
 
 const settings = computed(() => settingsStore.settings)
 const isConfigured = computed(() => settings.value?.isConfigured === true)
@@ -73,6 +75,15 @@ async function loadPage(): Promise<void> {
   }
 }
 
+watch(
+  () => runStore.runs,
+  (runs) => {
+    if (runs.length > 0) {
+      compose.runs = runs
+    }
+  },
+)
+
 async function send(): Promise<void> {
   const result = await compose.send()
   if (result === null) {
@@ -96,7 +107,7 @@ onMounted(() => void loadPage())
 
 <template>
   <header class="flex flex-wrap items-start justify-between gap-3">
-    <h1 class="min-w-0 text-title text-ink">Discord</h1>
+    <h2 id="discord-heading" class="min-w-0 text-title text-ink">Discord</h2>
   </header>
 
   <PageLoadState
@@ -119,7 +130,7 @@ onMounted(() => void loadPage())
   >
     <template #action>
       <Button as-child variant="primary">
-        <RouterLink to="/config">Go to Config</RouterLink>
+        <RouterLink to="/#config">Go to Config</RouterLink>
       </Button>
     </template>
   </EmptyState>
