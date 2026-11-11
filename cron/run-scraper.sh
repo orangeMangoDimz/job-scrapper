@@ -20,7 +20,7 @@ cd /workspace/scraper-bot
   claude \
     --model claude-haiku-4-5-20251001 \
     --dangerously-skip-permissions \
-    --disallowedTools "mcp__job-scraper__update_config,mcp__job-scraper__restore_config" \
+    --disallowedTools "mcp__job-scraper__update_config,mcp__job-scraper__restore_config,mcp__job-scraper__get_discord_settings,mcp__job-scraper__save_discord_settings,mcp__job-scraper__test_discord_connection,mcp__job-scraper__list_discord_channels,mcp__job-scraper__preview_discord_message,mcp__job-scraper__send_discord_message" \
     --verbose \
     --output-format stream-json \
     -p "$(cat "$PROMPT")" \
