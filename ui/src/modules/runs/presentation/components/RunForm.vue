@@ -22,7 +22,6 @@ const canStart = computed(
 watch(
   () => props.options,
   (options) => {
-    keywordText.value = options.keywords.join(', ')
     pickedSites.value = options.sites.filter((site) => site.isEnabled).map((site) => site.name)
   },
   { immediate: true },
@@ -40,16 +39,23 @@ function setSite(name: string, isPicked: boolean | 'indeterminate'): void {
   <form class="flex flex-col gap-4" @submit.prevent="emit('start', keywords, pickedSites)">
     <div class="flex flex-col gap-2">
       <Label for="keywords">Keywords, separated by commas</Label>
-      <Input id="keywords" v-model="keywordText" />
+      <div class="flex flex-col gap-3 sm:flex-row">
+        <Input
+          id="keywords"
+          v-model="keywordText"
+          placeholder="data analyst, python"
+          class="sm:flex-1"
+        />
+        <Button type="submit" variant="primary" :disabled="!canStart">
+          <Play aria-hidden="true" />
+          {{ isRunning ? 'Scrape running' : 'Run scrape' }}
+        </Button>
+      </div>
     </div>
     <fieldset class="flex flex-col gap-2">
       <legend class="mb-2 text-body-sm font-semibold text-ink">Sites</legend>
-      <div class="flex flex-wrap gap-2">
-        <div
-          v-for="site in options.sites"
-          :key="site.name"
-          class="flex items-center gap-2 rounded-md border border-line px-3 py-2 transition-[border-color,background-color] duration-200 ease-out has-data-[state=checked]:border-accent has-data-[state=checked]:bg-accent-soft"
-        >
+      <div class="flex flex-wrap gap-x-6 gap-y-3">
+        <div v-for="site in options.sites" :key="site.name" class="flex items-center gap-3">
           <Checkbox
             :id="`site-${site.name}`"
             :model-value="pickedSites.includes(site.name)"
@@ -59,11 +65,5 @@ function setSite(name: string, isPicked: boolean | 'indeterminate'): void {
         </div>
       </div>
     </fieldset>
-    <div>
-      <Button type="submit" variant="primary" :disabled="!canStart">
-        <Play aria-hidden="true" />
-        {{ isRunning ? 'Scrape running' : 'Run scrape' }}
-      </Button>
-    </div>
   </form>
 </template>

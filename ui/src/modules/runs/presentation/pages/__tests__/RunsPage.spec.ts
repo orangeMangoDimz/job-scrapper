@@ -87,7 +87,7 @@ describe('RunsPage', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('Loading run options')
-    expect(keywordInput(wrapper).value).toBe('django')
+    expect(keywordInput(wrapper).value).toBe('')
     expect(historyRows(wrapper)).toHaveLength(1)
   })
 
@@ -132,7 +132,7 @@ describe('RunsPage', () => {
     await flushPromises()
 
     expect(getOptions.execute).toHaveBeenCalledTimes(2)
-    expect(keywordInput(wrapper).value).toBe('django')
+    expect(keywordInput(wrapper).value).toBe('')
   })
 
   it('orders the sections: start a run, results, history, live logs', async () => {
