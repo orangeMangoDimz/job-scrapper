@@ -39,6 +39,7 @@ async function mountSidebar(path: string, canSignOut = true) {
     routes: [
       { path: '/runs', component: blank },
       { path: '/config', component: blank },
+      { path: '/discord', component: blank },
     ],
   })
   router.push(path)
@@ -88,13 +89,18 @@ describe('AppSidebar', () => {
     expect(wrapper.get('[data-slot="sidebar-header"]').text()).toContain('NoNo Scraper')
   })
 
-  it('links to Runs and Config inside the Main navigation', async () => {
+  it('links to Runs, Config and Discord inside the Main navigation', async () => {
     const wrapper = await mountSidebar('/runs')
     const nav = wrapper.get('nav[aria-label="Main"]')
 
-    expect(nav.findAll('a').map((link) => link.attributes('href'))).toEqual(['/runs', '/config'])
+    expect(nav.findAll('a').map((link) => link.attributes('href'))).toEqual([
+      '/runs',
+      '/config',
+      '/discord',
+    ])
     expect(nav.text()).toContain('Runs')
     expect(nav.text()).toContain('Config')
+    expect(nav.text()).toContain('Discord')
   })
 
   it('marks only the link for the current page', async () => {
