@@ -13,3 +13,4 @@ class StartRunRequest(BaseModel):
 
     keywords: list[Keyword] = Field(min_length=1, max_length=MAX_KEYWORDS)
     sites: list[SiteName] = Field(min_length=1, max_length=MAX_SITES)
+    notify_discord: bool = False

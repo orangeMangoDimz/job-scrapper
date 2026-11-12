@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from ui_server.errors import RunNotFoundError
-from ui_server.services.run_store import RunStatus, RunStore, build_payloads, flatten_result
+from ui_server.services.run_store import (
+    DISCORD_INTERRUPTED_MESSAGE,
+    DiscordStatus,
+    RunStatus,
+    RunStore,
+    build_payloads,
+    flatten_result,
+)
 
 
 def _store(tmp_path: Path, keep_runs: int = 50) -> RunStore:
@@ -105,6 +113,60 @@ def test_mark_interrupted_closes_running_runs(tmp_path: Path):
     store.mark_interrupted()
 
     assert store.get(record.id).status is RunStatus.INTERRUPTED
+
+
+def test_update_discord_sets_fields_and_keeps_run_status(tmp_path: Path):
+    store = _store(tmp_path)
+    finished = store.finish(store.create(("django",), ("upwork",)), _result(True, 2))
+
+    updated = store.update_discord(finished, DiscordStatus.PARTIAL, sent=3, failed=1, error="x")
+
+    assert updated.status is RunStatus.SUCCEEDED
+    assert store.get(finished.id) == updated
+    assert (updated.discord_status, updated.discord_sent) == (DiscordStatus.PARTIAL, 3)
+    assert (updated.discord_failed, updated.discord_error) == (1, "x")
+
+
+def test_new_record_has_no_discord_fields(tmp_path: Path):
+    record = _store(tmp_path).create(("django",), ("upwork",))
+
+    assert record.discord_status is None
+    assert (record.discord_sent, record.discord_failed, record.discord_error) == (0, 0, None)
+
+
+def test_get_loads_record_saved_before_discord_fields(tmp_path: Path):
+    store = _store(tmp_path)
+    record = store.create(("a",), ("upwork",))
+    path = tmp_path / "ui-runs" / record.id / "run.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for name in ("discord_status", "discord_sent", "discord_failed", "discord_error"):
+        del payload[name]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert store.get(record.id).discord_status is None
+
+
+def test_mark_interrupted_fails_sending_discord(tmp_path: Path):
+    store = _store(tmp_path)
+    finished = store.finish(store.create(("a",), ("upwork",)), _result(True, 1))
+    sending = store.update_discord(finished, DiscordStatus.SENDING)
+
+    store.mark_interrupted()
+
+    reloaded = store.get(sending.id)
+    assert reloaded.status is RunStatus.SUCCEEDED
+    assert reloaded.discord_status is DiscordStatus.FAILED
+    assert reloaded.discord_error == DISCORD_INTERRUPTED_MESSAGE
+
+
+def test_mark_interrupted_keeps_sent_discord(tmp_path: Path):
+    store = _store(tmp_path)
+    finished = store.finish(store.create(("a",), ("upwork",)), _result(True, 1))
+    sent = store.update_discord(finished, DiscordStatus.SENT, sent=1)
+
+    store.mark_interrupted()
+
+    assert store.get(sent.id) == sent
 
 
 def _corrupt_record(tmp_path: Path, run_id: str) -> None:

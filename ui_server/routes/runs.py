@@ -27,7 +27,9 @@ async def start_run(body: StartRunRequest, services: ServicesDep) -> dict[str, A
     unknown = sorted(set(body.sites) - known)
     if unknown:
         raise ConfigInvalidError(f"Unknown site: {', '.join(unknown)}")
-    record = services.run_service.start(tuple(body.keywords), tuple(body.sites))
+    record = services.run_service.start(
+        tuple(body.keywords), tuple(body.sites), body.notify_discord
+    )
     return ok(asdict(record))
 
 
