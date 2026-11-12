@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hmac
+import secrets
 import time
 from collections.abc import Callable
 
@@ -15,6 +17,7 @@ SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 SESSION_SUBJECT = "owner"
 SESSION_SALT = "scraper-ui-session"
 MAX_FAILED_ATTEMPTS = 5
+SESSION_SECRET_BYTES = 32
 FAILURE_WINDOW_SECONDS = 15 * 60.0
 
 
@@ -40,8 +43,13 @@ class LoginLimiter:
 
 class AuthService:
     def __init__(self, settings: Settings) -> None:
+        self._is_dev = settings.env == "dev"
         self._password_hash = settings.password_hash
-        self._signer = TimestampSigner(settings.session_secret or "dev", salt=SESSION_SALT)
+        self._dev_login_key = settings.dev_login_key
+        self._signer = TimestampSigner(
+            settings.session_secret or secrets.token_urlsafe(SESSION_SECRET_BYTES),
+            salt=SESSION_SALT,
+        )
         self._hasher = PasswordHasher()
         self._limiter = LoginLimiter()
 
@@ -63,6 +71,10 @@ class AuthService:
         return True
 
     def _is_right_password(self, password: str) -> bool:
+        if self._is_dev:
+            return bool(self._dev_login_key) and hmac.compare_digest(
+                password.encode(), self._dev_login_key.encode()
+            )
         try:
             return self._hasher.verify(self._password_hash, password)
         except (VerificationError, InvalidHashError):

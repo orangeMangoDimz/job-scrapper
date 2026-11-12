@@ -33,8 +33,6 @@ ServicesDep = Annotated[Services, Depends(get_services)]
 
 
 def require_session(request: Request, services: ServicesDep) -> None:
-    if not services.settings.auth_enabled:
-        return
     if not services.auth.is_signed_in(request.cookies.get(SESSION_COOKIE)):
         raise NotSignedInError()
 
