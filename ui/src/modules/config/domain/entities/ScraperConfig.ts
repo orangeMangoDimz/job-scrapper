@@ -105,7 +105,7 @@ export function toJobFieldLabel(field: string): string {
   return [first.charAt(0).toUpperCase() + first.slice(1), ...rest].join(' ')
 }
 
-function isSame(first: unknown, second: unknown): boolean {
+export function isSame(first: unknown, second: unknown): boolean {
   return JSON.stringify(first) === JSON.stringify(second)
 }
 

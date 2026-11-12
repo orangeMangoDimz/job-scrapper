@@ -1,7 +1,8 @@
-import { ref } from 'vue'
+import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import {
   hasConfigChanges,
+  isSame,
   toConfigChanges,
   type ConfigSnapshot,
   type ConfigValues,
@@ -23,6 +24,21 @@ export const useConfigStore = defineStore('config', () => {
   const historyError = ref<string | null>(null)
   const isSaving = ref(false)
   const isRestoring = ref(false)
+
+  const isDirty = computed(
+    () =>
+      values.value !== null &&
+      snapshot.value !== null &&
+      !isSame(values.value, snapshot.value.values),
+  )
+
+  function discard(): void {
+    if (snapshot.value === null) {
+      return
+    }
+    values.value = structuredClone(toRaw(snapshot.value.values))
+    saveError.value = null
+  }
 
   async function load(): Promise<void> {
     status.value = 'loading'
@@ -100,6 +116,8 @@ export const useConfigStore = defineStore('config', () => {
     historyError,
     isSaving,
     isRestoring,
+    isDirty,
+    discard,
     load,
     loadHistory,
     save,
