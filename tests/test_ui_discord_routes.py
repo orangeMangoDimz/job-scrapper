@@ -14,6 +14,7 @@ from ui_server.errors import McpUnavailableError
 from ui_server.settings import Settings
 
 LOCAL_URL = "http://127.0.0.1:8090"
+DEV_LOGIN_KEY = "dev-login-key-for-tests"
 CHANNEL_ID = "123456789012345678"
 SETTINGS = {
     "configured": True,
@@ -81,6 +82,7 @@ def _failed(reason: str, message: str = "nope") -> dict[str, Any]:
 def _settings(tmp_path: Path, **overrides: Any) -> Settings:
     values = {
         "env": "dev",
+        "dev_login_key": DEV_LOGIN_KEY,
         "runs_dir": tmp_path / "runs",
         "log_path": tmp_path / "scraper.log",
         "static_dir": tmp_path / "dist",
@@ -101,6 +103,7 @@ def app(tmp_path: Path, gateway: FakeGateway) -> FastAPI:
 @pytest.fixture
 def client(app: FastAPI):
     with TestClient(app, base_url=LOCAL_URL) as test_client:
+        test_client.post("/api/auth/login", json={"password": DEV_LOGIN_KEY})
         yield test_client
 
 

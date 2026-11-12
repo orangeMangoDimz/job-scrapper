@@ -14,6 +14,7 @@ from ui_server.errors import McpUnavailableError
 from ui_server.settings import Settings
 
 PASSWORD = "correct horse battery"  # pragma: allowlist secret
+DEV_LOGIN_KEY = "dev-login-key-for-tests"
 LOCAL_URL = "http://127.0.0.1:8090"
 SITES = {
     "keywords": ["devops"],
@@ -94,6 +95,7 @@ class FakeGateway:
 def _settings(tmp_path: Path, **overrides: Any) -> Settings:
     values = {
         "env": "dev",
+        "dev_login_key": DEV_LOGIN_KEY,
         "runs_dir": tmp_path / "runs",
         "log_path": tmp_path / "scraper.log",
         "static_dir": tmp_path / "dist",
@@ -117,10 +119,16 @@ def gateway() -> FakeGateway:
 
 
 @pytest.fixture
-def client(tmp_path: Path, gateway: FakeGateway):
+def guest_client(tmp_path: Path, gateway: FakeGateway):
     app = create_app(_settings(tmp_path), gateway)
     with TestClient(app, base_url=LOCAL_URL) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def client(guest_client: TestClient):
+    guest_client.post("/api/auth/login", json={"password": DEV_LOGIN_KEY})
+    return guest_client
 
 
 @pytest.fixture
@@ -156,11 +164,30 @@ def test_health_needs_no_login(prod_client: TestClient):
     assert prod_client.get("/health").json() == {"status": "ok"}
 
 
-def test_session_reports_login_not_needed_in_dev(client: TestClient):
-    assert client.get("/api/auth/session").json()["data"] == {
-        "auth_required": False,
+def test_dev_session_needs_login(guest_client: TestClient):
+    assert guest_client.get("/api/auth/session").json()["data"] == {
+        "auth_required": True,
+        "signed_in": False,
+    }
+    assert guest_client.get("/api/runs").status_code == 401
+
+
+def test_dev_login_key_opens_api(guest_client: TestClient):
+    response = guest_client.post("/api/auth/login", json={"password": DEV_LOGIN_KEY})
+
+    assert response.status_code == 200
+    assert guest_client.get("/api/auth/session").json()["data"] == {
+        "auth_required": True,
         "signed_in": True,
     }
+    assert guest_client.get("/api/runs").status_code == 200
+
+
+def test_dev_wrong_login_key_returns_401(guest_client: TestClient):
+    response = guest_client.post("/api/auth/login", json={"password": "wrong"})
+
+    assert response.status_code == 401
+    assert guest_client.get("/api/runs").status_code == 401
 
 
 def test_sites_returns_options(client: TestClient):

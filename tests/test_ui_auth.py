@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import pytest
 from argon2 import PasswordHasher
+from itsdangerous import TimestampSigner
 
 from ui_server.errors import InvalidPasswordError, TooManyAttemptsError
-from ui_server.services.auth_service import MAX_FAILED_ATTEMPTS, AuthService, LoginLimiter
+from ui_server.services.auth_service import (
+    MAX_FAILED_ATTEMPTS,
+    SESSION_SALT,
+    SESSION_SUBJECT,
+    AuthService,
+    LoginLimiter,
+)
 from ui_server.settings import Settings
 
 PASSWORD = "correct horse battery"  # pragma: allowlist secret
+DEV_LOGIN_KEY = "dev-login-key-for-tests"
 
 
 def _service() -> AuthService:
@@ -18,6 +26,51 @@ def _service() -> AuthService:
         domain="ui.example.com",
     )
     return AuthService(settings)
+
+
+def _dev_service() -> AuthService:
+    return AuthService(Settings(env="dev", dev_login_key=DEV_LOGIN_KEY))
+
+
+def test_dev_login_key_gives_valid_session():
+    service = _dev_service()
+
+    assert service.is_signed_in(service.login(DEV_LOGIN_KEY, "1.1.1.1")) is True
+
+
+@pytest.mark.parametrize("password", ["wrong", f"{DEV_LOGIN_KEY} ", DEV_LOGIN_KEY.upper(), ""])
+def test_dev_rejects_anything_but_the_dev_login_key(password: str):
+    with pytest.raises(InvalidPasswordError):
+        _dev_service().login(password, "1.1.1.1")
+
+
+def test_dev_ignores_the_prod_password_hash():
+    service = AuthService(
+        Settings(
+            env="dev",
+            dev_login_key=DEV_LOGIN_KEY,
+            password_hash=PasswordHasher().hash(PASSWORD),
+        )
+    )
+
+    with pytest.raises(InvalidPasswordError):
+        service.login(PASSWORD, "1.1.1.1")
+
+
+def test_dev_session_is_not_signed_with_a_known_secret():
+    forged = TimestampSigner("dev", salt=SESSION_SALT).sign(SESSION_SUBJECT).decode()
+
+    assert _dev_service().is_signed_in(forged) is False
+
+
+def test_dev_failures_block_client():
+    service = _dev_service()
+    for _ in range(MAX_FAILED_ATTEMPTS):
+        with pytest.raises(InvalidPasswordError):
+            service.login("wrong", "1.1.1.1")
+
+    with pytest.raises(TooManyAttemptsError):
+        service.login(DEV_LOGIN_KEY, "1.1.1.1")
 
 
 def test_right_password_gives_valid_session():

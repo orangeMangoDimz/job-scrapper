@@ -16,9 +16,8 @@ router = APIRouter(prefix="/api/auth")
 
 @router.get("/session")
 def read_session(request: Request, services: ServicesDep) -> dict[str, Any]:
-    required = services.settings.auth_enabled
-    signed_in = not required or services.auth.is_signed_in(request.cookies.get(SESSION_COOKIE))
-    return ok({"auth_required": required, "signed_in": signed_in})
+    signed_in = services.auth.is_signed_in(request.cookies.get(SESSION_COOKIE))
+    return ok({"auth_required": True, "signed_in": signed_in})
 
 
 @router.post("/login")
