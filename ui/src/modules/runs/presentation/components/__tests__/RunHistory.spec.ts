@@ -15,6 +15,10 @@ function makeRun(id: string, status: RunStatus, overrides: Partial<RunRecord> = 
     jobCount: 12,
     errorCount: 0,
     error: null,
+    discordStatus: null,
+    discordSent: 0,
+    discordFailed: 0,
+    discordError: null,
     ...overrides,
   }
 }
@@ -121,5 +125,46 @@ describe('RunHistory', () => {
 
     expect(listId).toBeTruthy()
     expect(wrapper.get('[aria-controls]').attributes('aria-controls')).toBe(listId)
+  })
+
+  describe('discord status', () => {
+    it('shows nothing about Discord when there was no send', () => {
+      const wrapper = mountHistory([makeRun('a', 'succeeded')])
+
+      expect(wrapper.get('li button').text()).not.toContain('Discord')
+    })
+
+    it('shows that it is sending', () => {
+      const wrapper = mountHistory([makeRun('a', 'succeeded', { discordStatus: 'sending' })])
+
+      expect(wrapper.get('li button').text()).toContain('Sending to Discord')
+      expect(wrapper.get('[data-slot="discord-status"]').attributes('data-tone')).toBe('neutral')
+    })
+
+    it('shows how many were sent', () => {
+      const wrapper = mountHistory([
+        makeRun('a', 'succeeded', { discordStatus: 'sent', discordSent: 7 }),
+      ])
+
+      expect(wrapper.get('li button').text()).toContain('Sent 7 to Discord')
+    })
+
+    it('shows how many were sent and failed', () => {
+      const wrapper = mountHistory([
+        makeRun('a', 'succeeded', { discordStatus: 'partial', discordSent: 5, discordFailed: 2 }),
+      ])
+
+      expect(wrapper.get('li button').text()).toContain('Sent 5, failed 2 on Discord')
+    })
+
+    it('shows the reason when Discord failed in the danger tone', () => {
+      const wrapper = mountHistory([
+        makeRun('a', 'succeeded', { discordStatus: 'failed', discordError: 'Missing access' }),
+      ])
+      const badge = wrapper.get('[data-slot="discord-status"]')
+
+      expect(badge.text()).toBe('Discord failed: Missing access')
+      expect(badge.attributes('data-tone')).toBe('danger')
+    })
   })
 })

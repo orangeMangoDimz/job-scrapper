@@ -27,7 +27,11 @@ export class RunRemoteDataSource {
     return this.client.get<RunDetailModel>(`${RUNS_PATH}/${encodeURIComponent(id)}`)
   }
 
-  startRun(keywords: string[], sites: string[]): Promise<RunRecordModel> {
-    return this.client.post<RunRecordModel>(RUNS_PATH, { keywords, sites })
+  startRun(keywords: string[], sites: string[], notifyDiscord: boolean): Promise<RunRecordModel> {
+    return this.client.post<RunRecordModel>(RUNS_PATH, {
+      keywords,
+      sites,
+      notify_discord: notifyDiscord,
+    })
   }
 }

@@ -16,3 +16,4 @@ services:
     environment:
       - UI_ENV=dev
       - UI_MCP_URL=http://scraper-mcp:8080/mcp
+      - UI_DEV_LOGIN_KEY=${UI_DEV_LOGIN_KEY:-}

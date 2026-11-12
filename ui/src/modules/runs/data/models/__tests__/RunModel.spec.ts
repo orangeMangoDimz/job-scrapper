@@ -12,6 +12,10 @@ const MODEL: RunDetailModel = {
     job_count: 1,
     error_count: 1,
     error: null,
+    discord_status: 'partial',
+    discord_sent: 3,
+    discord_failed: 1,
+    discord_error: 'Missing access',
   },
   jobs: [
     {
@@ -35,6 +39,27 @@ describe('toRunDetail', () => {
     expect(detail.record.startedAt).toBe('2026-11-01T10:00:00+00:00')
     expect(detail.jobs[0]?.matchedKeyword).toBe('django')
     expect(detail.failures[0]?.reason).toBe('timeout')
+  })
+
+  it('maps the discord send fields', () => {
+    const { record } = toRunDetail(MODEL)
+
+    expect(record.discordStatus).toBe('partial')
+    expect(record.discordSent).toBe(3)
+    expect(record.discordFailed).toBe(1)
+    expect(record.discordError).toBe('Missing access')
+  })
+
+  it('treats missing discord fields as no send', () => {
+    const { discord_status, discord_sent, discord_failed, discord_error, ...old } = MODEL.record
+    void [discord_status, discord_sent, discord_failed, discord_error]
+
+    const { record } = toRunDetail({ ...MODEL, record: old })
+
+    expect(record.discordStatus).toBeNull()
+    expect(record.discordSent).toBe(0)
+    expect(record.discordFailed).toBe(0)
+    expect(record.discordError).toBeNull()
   })
 
   it('keeps web links', () => {

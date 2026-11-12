@@ -163,4 +163,96 @@ describe('useConfigStore', () => {
 
     expect(restoreConfig.execute).not.toHaveBeenCalled()
   })
+
+  it('is not dirty before a load', () => {
+    const store = useConfigStore()
+
+    expect(store.isDirty).toBe(false)
+  })
+
+  it('is not dirty right after a load', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const store = useConfigStore()
+
+    await store.load()
+
+    expect(store.isDirty).toBe(false)
+  })
+
+  it('is dirty once a value differs from the snapshot', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const store = useConfigStore()
+    await store.load()
+
+    store.values!.limit = 9
+
+    expect(store.isDirty).toBe(true)
+  })
+
+  it('is dirty when a nested value changes', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const store = useConfigStore()
+    await store.load()
+
+    store.values!.filter.location.push('Jakarta')
+
+    expect(store.isDirty).toBe(true)
+  })
+
+  it('is not dirty again when an edit is put back', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const store = useConfigStore()
+    await store.load()
+    store.values!.limit = 9
+
+    store.values!.limit = 3
+
+    expect(store.isDirty).toBe(false)
+  })
+
+  it('discards edits back to the snapshot values', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const store = useConfigStore()
+    await store.load()
+    store.values!.limit = 9
+    store.values!.keywords.push('vue')
+
+    store.discard()
+
+    expect(store.values).toEqual(SNAPSHOT.values)
+    expect(store.isDirty).toBe(false)
+  })
+
+  it('keeps the snapshot untouched when discarding then editing again', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    const store = useConfigStore()
+    await store.load()
+    store.discard()
+
+    store.values!.keywords.push('vue')
+
+    expect(store.snapshot?.values.keywords).toEqual(['django'])
+    expect(store.isDirty).toBe(true)
+  })
+
+  it('does nothing when discarding before a load', () => {
+    const store = useConfigStore()
+
+    store.discard()
+
+    expect(store.values).toBeNull()
+  })
+
+  it('clears the save error when discarding', async () => {
+    getConfig.execute.mockResolvedValue(SNAPSHOT)
+    saveConfig.execute.mockRejectedValue(new Error('Conflict'))
+    const store = useConfigStore()
+    await store.load()
+    store.values!.limit = 9
+    await store.save()
+
+    store.discard()
+
+    expect(store.saveError).toBeNull()
+  })
 })

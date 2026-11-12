@@ -53,6 +53,10 @@ const RUN: RunRecord = {
   jobCount: 2,
   errorCount: 0,
   error: null,
+  discordStatus: null,
+  discordSent: 0,
+  discordFailed: 0,
+  discordError: null,
 }
 
 const DETAIL: RunDetail = {

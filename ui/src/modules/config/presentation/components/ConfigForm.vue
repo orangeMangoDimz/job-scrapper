@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { toast } from 'vue-sonner'
 import { toOptionalNumber, type SiteSetting } from '@/modules/config/domain/entities/ScraperConfig'
 import ConfigHistory from '@/modules/config/presentation/components/ConfigHistory.vue'
@@ -8,12 +8,13 @@ import JobFieldsInput from '@/modules/config/presentation/components/JobFieldsIn
 import ListInput from '@/modules/config/presentation/components/ListInput.vue'
 import SiteSettings from '@/modules/config/presentation/components/SiteSettings.vue'
 import { useConfigStore } from '@/modules/config/presentation/stores/useConfigStore'
-import PageLoadState from '@/shared/components/PageLoadState.vue'
 import PageSection from '@/shared/components/PageSection.vue'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
-import { Skeleton } from '@/shared/components/ui/skeleton'
+import { cn } from '@/shared/utils/cn'
+
+withDefaults(defineProps<{ isSaveBarSticky?: boolean }>(), { isSaveBarSticky: true })
 
 const SAVED_MESSAGE = 'Config saved'
 const store = useConfigStore()
@@ -24,9 +25,6 @@ const enabledSiteCount = computed(
 const jobFields = computed(() => store.snapshot?.jobFields ?? [])
 const mandatoryFields = computed(() => store.snapshot?.mandatoryFields ?? [])
 const locationOptions = computed(() => store.snapshot?.locationOptions ?? {})
-const savedAt = computed(() =>
-  store.snapshot === null ? '' : new Date(store.snapshot.updatedAt).toLocaleString(),
-)
 
 function updateSite(next: SiteSetting): void {
   if (store.values !== null) {
@@ -39,38 +37,10 @@ async function save(): Promise<void> {
     toast.success(SAVED_MESSAGE)
   }
 }
-
-onMounted(() => {
-  void store.load()
-  void store.loadHistory()
-})
 </script>
 
 <template>
-  <header class="flex flex-wrap items-start justify-between gap-3">
-    <div class="flex min-w-0 flex-col gap-1">
-      <h2 id="config-heading" class="text-title text-ink">Config</h2>
-      <p v-if="store.snapshot" class="text-body-sm text-ink-muted">
-        Version {{ store.snapshot.version }}, saved {{ savedAt }} by {{ store.snapshot.updatedBy }}.
-        Changes apply from the next run
-      </p>
-    </div>
-  </header>
-
-  <PageLoadState
-    v-if="store.values === null"
-    :is-error="store.status === 'error'"
-    loading-label="Loading config"
-    error-title="Could not load config"
-    :error-message="store.errorMessage"
-    @retry="store.load"
-  >
-    <div class="flex flex-col gap-6 md:gap-4">
-      <Skeleton v-for="index in 3" :key="index" class="h-48 w-full rounded-lg" />
-    </div>
-  </PageLoadState>
-
-  <div v-else class="flex min-w-0 flex-col gap-6 md:gap-4">
+  <div v-if="store.values !== null" class="flex min-w-0 flex-col gap-6 md:gap-4">
     <div
       v-if="store.status === 'error'"
       role="alert"
@@ -163,11 +133,19 @@ onMounted(() => {
 
       <div
         data-slot="save-bar"
-        class="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center justify-end gap-3 bg-surface px-4 py-3 md:mx-0"
+        :class="
+          cn(
+            'flex flex-wrap items-center justify-end gap-3 py-3',
+            isSaveBarSticky && 'sticky bottom-0 z-20 -mx-4 bg-surface px-4 md:mx-0',
+          )
+        "
       >
         <p v-if="store.saveError" role="alert" class="mr-auto text-body-sm text-danger">
           {{ store.saveError }}
         </p>
+        <Button type="button" :disabled="!store.isDirty || store.isSaving" @click="store.discard">
+          Discard
+        </Button>
         <Button type="submit" variant="primary" :disabled="store.isSaving || isStale">
           {{ store.isSaving ? 'Saving' : 'Save' }}
         </Button>

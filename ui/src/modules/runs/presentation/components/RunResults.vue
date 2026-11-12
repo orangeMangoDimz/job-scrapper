@@ -10,6 +10,7 @@ import {
   writeResultsTab,
   type ResultsTab,
 } from '@/modules/runs/presentation/components/resultsTabStorage'
+import DiscordStatusText from '@/modules/runs/presentation/components/DiscordStatusText.vue'
 import { formatJobCount, RUN_STATUS_VIEWS } from '@/modules/runs/presentation/components/runStatus'
 import EmptyState from '@/shared/components/EmptyState.vue'
 import PageSection from '@/shared/components/PageSection.vue'
@@ -65,6 +66,7 @@ function jobMeta(parts: (string | null)[]): string {
     <template #actions>
       <Badge :tone="status.tone">{{ status.label }}</Badge>
     </template>
+    <DiscordStatusText :record="detail.record" class="text-body-sm" />
     <p
       v-if="detail.record.error"
       role="alert"

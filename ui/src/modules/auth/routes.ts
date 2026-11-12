@@ -20,6 +20,6 @@ export const authRoutes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: () => import('@/modules/auth/presentation/pages/LoginPage.vue'),
-    meta: { isPublic: true },
+    meta: { isPublic: true, title: 'Sign in' },
   },
 ]

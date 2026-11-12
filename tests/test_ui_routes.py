@@ -11,9 +11,11 @@ from fastapi.testclient import TestClient
 
 from ui_server.app import create_app
 from ui_server.errors import McpUnavailableError
+from ui_server.services.run_store import DISCORD_INTERRUPTED_MESSAGE, DiscordStatus
 from ui_server.settings import Settings
 
 PASSWORD = "correct horse battery"  # pragma: allowlist secret
+DEV_LOGIN_KEY = "dev-login-key-for-tests"
 LOCAL_URL = "http://127.0.0.1:8090"
 SITES = {
     "keywords": ["devops"],
@@ -55,6 +57,11 @@ HISTORY = [
     }
 ]
 SAVED = {"ok": True, "version": 5}
+DISCORD_SETTINGS = {
+    "configured": True,
+    "default_channel_id": "123456789012345678",
+    "mention_user_id": "",
+}
 SCRAPE_RESULT = {
     "ok": True,
     "results": [{"keyword": "devops", "sites": [{"site": "upwork", "jobs": [{"title": "A"}]}]}],
@@ -69,6 +76,7 @@ class FakeGateway:
         self.save_result: dict[str, Any] = SAVED
         self.scrape_delay = 0.0
         self.scrape_result: dict[str, Any] = SCRAPE_RESULT
+        self.discord_settings: dict[str, Any] = DISCORD_SETTINGS
         self.calls: list[str] = []
         self.arguments: dict[str, dict[str, Any]] = {}
 
@@ -88,12 +96,23 @@ class FakeGateway:
             "scrape_jobs": self.scrape_result,
             "update_config": self.save_result,
             "restore_config": self.save_result,
+            "get_discord_settings": self.discord_settings,
+            "send_discord_message": {
+                "ok": True,
+                "sent": 2,
+                "failed": 0,
+                "results": [
+                    {"kind": "job", "status": "sent"},
+                    {"kind": "summary", "status": "sent"},
+                ],
+            },
         }[tool]
 
 
 def _settings(tmp_path: Path, **overrides: Any) -> Settings:
     values = {
         "env": "dev",
+        "dev_login_key": DEV_LOGIN_KEY,
         "runs_dir": tmp_path / "runs",
         "log_path": tmp_path / "scraper.log",
         "static_dir": tmp_path / "dist",
@@ -117,10 +136,16 @@ def gateway() -> FakeGateway:
 
 
 @pytest.fixture
-def client(tmp_path: Path, gateway: FakeGateway):
+def guest_client(tmp_path: Path, gateway: FakeGateway):
     app = create_app(_settings(tmp_path), gateway)
     with TestClient(app, base_url=LOCAL_URL) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def client(guest_client: TestClient):
+    guest_client.post("/api/auth/login", json={"password": DEV_LOGIN_KEY})
+    return guest_client
 
 
 @pytest.fixture
@@ -156,11 +181,30 @@ def test_health_needs_no_login(prod_client: TestClient):
     assert prod_client.get("/health").json() == {"status": "ok"}
 
 
-def test_session_reports_login_not_needed_in_dev(client: TestClient):
-    assert client.get("/api/auth/session").json()["data"] == {
-        "auth_required": False,
+def test_dev_session_needs_login(guest_client: TestClient):
+    assert guest_client.get("/api/auth/session").json()["data"] == {
+        "auth_required": True,
+        "signed_in": False,
+    }
+    assert guest_client.get("/api/runs").status_code == 401
+
+
+def test_dev_login_key_opens_api(guest_client: TestClient):
+    response = guest_client.post("/api/auth/login", json={"password": DEV_LOGIN_KEY})
+
+    assert response.status_code == 200
+    assert guest_client.get("/api/auth/session").json()["data"] == {
+        "auth_required": True,
         "signed_in": True,
     }
+    assert guest_client.get("/api/runs").status_code == 200
+
+
+def test_dev_wrong_login_key_returns_401(guest_client: TestClient):
+    response = guest_client.post("/api/auth/login", json={"password": "wrong"})
+
+    assert response.status_code == 401
+    assert guest_client.get("/api/runs").status_code == 401
 
 
 def test_sites_returns_options(client: TestClient):
@@ -188,6 +232,66 @@ def test_start_run_then_read_result(client: TestClient):
     assert detail["record"]["status"] == "succeeded"
     assert detail["record"]["job_count"] == 1
     assert detail["jobs"] == [{"title": "A"}]
+
+
+def _wait_for_discord(client: TestClient, run_id: str) -> dict:
+    deadline = time.monotonic() + 2
+    record = client.get(f"/api/runs/{run_id}").json()["data"]["record"]
+    while record["discord_status"] == "sending" and time.monotonic() < deadline:
+        time.sleep(0.01)
+        record = client.get(f"/api/runs/{run_id}").json()["data"]["record"]
+    return record
+
+
+def test_start_run_without_notify_has_no_discord_status(client: TestClient, gateway: FakeGateway):
+    run = _run(client)
+
+    record = client.get(f"/api/runs/{run['id']}").json()["data"]["record"]
+
+    assert record["discord_status"] is None
+    assert "send_discord_message" not in gateway.calls
+
+
+def test_start_run_with_notify_sends_to_discord(client: TestClient, gateway: FakeGateway):
+    response = client.post(
+        "/api/runs",
+        json={"keywords": ["devops"], "sites": ["upwork"], "notify_discord": True},
+    )
+    assert response.status_code == 202
+
+    record = _wait_for_discord(client, response.json()["data"]["id"])
+
+    assert record["status"] == "succeeded"
+    assert record["discord_status"] == "sent"
+    assert (record["discord_sent"], record["discord_failed"]) == (1, 0)
+    assert gateway.arguments["send_discord_message"] == {
+        "channel_id": "123456789012345678",
+        "mention": False,
+        "jobs": [{"title": "A"}],
+    }
+
+
+def test_start_run_rejects_non_boolean_notify(client: TestClient):
+    response = client.post(
+        "/api/runs",
+        json={"keywords": ["devops"], "sites": ["upwork"], "notify_discord": "maybe"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_restart_marks_sending_discord_failed(tmp_path: Path, gateway: FakeGateway):
+    app = create_app(_settings(tmp_path), gateway)
+    store = app.state.services.run_store
+    finished = store.finish(store.create(("devops",), ("upwork",)), SCRAPE_RESULT)
+    store.update_discord(finished, DiscordStatus.SENDING)
+
+    with TestClient(app, base_url=LOCAL_URL) as test_client:
+        test_client.post("/api/auth/login", json={"password": DEV_LOGIN_KEY})
+        record = test_client.get(f"/api/runs/{finished.id}").json()["data"]["record"]
+
+    assert record["discord_status"] == "failed"
+    assert record["discord_error"] == DISCORD_INTERRUPTED_MESSAGE
 
 
 def test_read_run_returns_raw_and_filtered_payloads(client: TestClient, gateway: FakeGateway):
@@ -312,9 +416,7 @@ def test_config_read_keeps_site_filter_states_apart(client: TestClient):
     }
 
 
-def test_config_read_marks_stale_values_when_mcp_is_down(
-    client: TestClient, gateway: FakeGateway
-):
+def test_config_read_marks_stale_values_when_mcp_is_down(client: TestClient, gateway: FakeGateway):
     client.get("/api/config")
     gateway.is_down = True
 
@@ -496,3 +598,19 @@ def test_spa_paths_fall_back_to_index(tmp_path: Path, gateway: FakeGateway):
     with TestClient(app, base_url=LOCAL_URL) as test_client:
         assert "app" in test_client.get("/config").text
         assert test_client.get("/api/missing").status_code == 404
+
+
+def test_favicon_files_are_served_instead_of_index(tmp_path: Path, gateway: FakeGateway):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>app</html>")
+    (dist / "favicon.svg").write_text("<svg></svg>")
+    (dist / "favicon.ico").write_bytes(b"\x00\x00\x01\x00")
+    app = create_app(_settings(tmp_path), gateway)
+    with TestClient(app, base_url=LOCAL_URL) as test_client:
+        svg = test_client.get("/favicon.svg")
+        ico = test_client.get("/favicon.ico")
+
+    assert svg.headers["content-type"].startswith("image/svg+xml")
+    assert svg.text == "<svg></svg>"
+    assert ico.content == b"\x00\x00\x01\x00"

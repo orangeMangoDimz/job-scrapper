@@ -1,6 +1,7 @@
 import type {
   JsonObject,
   RunDetail,
+  RunDiscordStatus,
   RunJob,
   RunPayload,
   RunOptions,
@@ -18,6 +19,10 @@ export interface RunRecordModel {
   job_count: number
   error_count: number
   error: string | null
+  discord_status?: RunDiscordStatus | null
+  discord_sent?: number
+  discord_failed?: number
+  discord_error?: string | null
 }
 
 export interface RunJobModel {
@@ -60,6 +65,10 @@ export function toRunRecord(model: RunRecordModel): RunRecord {
     jobCount: model.job_count,
     errorCount: model.error_count,
     error: model.error,
+    discordStatus: model.discord_status ?? null,
+    discordSent: model.discord_sent ?? 0,
+    discordFailed: model.discord_failed ?? 0,
+    discordError: model.discord_error ?? null,
   }
 }
 

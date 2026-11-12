@@ -23,7 +23,7 @@ export class RunRepositoryImpl implements RunRepository {
     return toRunDetail(await this.dataSource.getRun(id))
   }
 
-  async startRun(keywords: string[], sites: string[]): Promise<RunRecord> {
-    return toRunRecord(await this.dataSource.startRun(keywords, sites))
+  async startRun(keywords: string[], sites: string[], notifyDiscord: boolean): Promise<RunRecord> {
+    return toRunRecord(await this.dataSource.startRun(keywords, sites, notifyDiscord))
   }
 }

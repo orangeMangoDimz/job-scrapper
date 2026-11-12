@@ -18,6 +18,7 @@ RUN_ID_PATTERN = re.compile(r"^\d{8}T\d{6}Z-[0-9a-f]{6}$")
 RECORD_FILE = "run.json"
 RESULT_FILE = "result.json"
 INTERRUPTED_MESSAGE = "The UI service restarted during this run."
+DISCORD_INTERRUPTED_MESSAGE = "The UI service restarted while sending to Discord."
 UNREADABLE_ERRORS = (OSError, ValueError, KeyError, TypeError)
 
 
@@ -27,6 +28,13 @@ class RunStatus(StrEnum):
     PARTIAL = "partial"
     FAILED = "failed"
     INTERRUPTED = "interrupted"
+
+
+class DiscordStatus(StrEnum):
+    SENDING = "sending"
+    SENT = "sent"
+    PARTIAL = "partial"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True)
@@ -40,6 +48,10 @@ class RunRecord:
     job_count: int = 0
     error_count: int = 0
     error: str | None = None
+    discord_status: DiscordStatus | None = None
+    discord_sent: int = 0
+    discord_failed: int = 0
+    discord_error: str | None = None
 
 
 def _now() -> datetime:
@@ -57,10 +69,12 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _to_record(payload: dict[str, Any]) -> RunRecord:
+    discord_status = payload.get("discord_status")
     return RunRecord(
         **{
             **payload,
             "status": RunStatus(payload["status"]),
+            "discord_status": None if discord_status is None else DiscordStatus(discord_status),
             "keywords": tuple(payload["keywords"]),
             "sites": tuple(payload["sites"]),
         }
@@ -156,6 +170,24 @@ class RunStore:
             )
         )
 
+    def update_discord(
+        self,
+        record: RunRecord,
+        status: DiscordStatus,
+        sent: int = 0,
+        failed: int = 0,
+        error: str | None = None,
+    ) -> RunRecord:
+        return self._save(
+            replace(
+                record,
+                discord_status=status,
+                discord_sent=sent,
+                discord_failed=failed,
+                discord_error=error,
+            )
+        )
+
     def get(self, run_id: str) -> RunRecord:
         path = self._record_path(run_id)
         if not path.exists():
@@ -190,6 +222,14 @@ class RunStore:
                         status=RunStatus.INTERRUPTED,
                         finished_at=_now().isoformat(),
                         error=INTERRUPTED_MESSAGE,
+                    )
+                )
+            elif record.discord_status is DiscordStatus.SENDING:
+                self._save(
+                    replace(
+                        record,
+                        discord_status=DiscordStatus.FAILED,
+                        discord_error=DISCORD_INTERRUPTED_MESSAGE,
                     )
                 )
 

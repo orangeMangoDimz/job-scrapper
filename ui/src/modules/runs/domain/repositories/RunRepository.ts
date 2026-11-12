@@ -4,5 +4,5 @@ export interface RunRepository {
   getOptions(): Promise<RunOptions>
   listRuns(): Promise<RunRecord[]>
   getRun(id: string): Promise<RunDetail>
-  startRun(keywords: string[], sites: string[]): Promise<RunRecord>
+  startRun(keywords: string[], sites: string[], notifyDiscord: boolean): Promise<RunRecord>
 }
