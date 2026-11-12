@@ -523,3 +523,19 @@ def test_spa_paths_fall_back_to_index(tmp_path: Path, gateway: FakeGateway):
     with TestClient(app, base_url=LOCAL_URL) as test_client:
         assert "app" in test_client.get("/config").text
         assert test_client.get("/api/missing").status_code == 404
+
+
+def test_favicon_files_are_served_instead_of_index(tmp_path: Path, gateway: FakeGateway):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html>app</html>")
+    (dist / "favicon.svg").write_text("<svg></svg>")
+    (dist / "favicon.ico").write_bytes(b"\x00\x00\x01\x00")
+    app = create_app(_settings(tmp_path), gateway)
+    with TestClient(app, base_url=LOCAL_URL) as test_client:
+        svg = test_client.get("/favicon.svg")
+        ico = test_client.get("/favicon.ico")
+
+    assert svg.headers["content-type"].startswith("image/svg+xml")
+    assert svg.text == "<svg></svg>"
+    assert ico.content == b"\x00\x00\x01\x00"

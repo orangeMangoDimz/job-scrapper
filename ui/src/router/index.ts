@@ -5,6 +5,7 @@ import { discordRoutes } from '@/modules/discord/routes'
 import { homeRoutes } from '@/modules/home/routes'
 import { runRoutes } from '@/modules/runs/routes'
 import { createAuthGuard } from '@/router/authGuard'
+import { installPageTitle } from '@/router/pageTitle'
 
 function scrollMotion(): ScrollBehavior {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
@@ -25,5 +26,6 @@ const router = createRouter({
 })
 
 router.beforeEach(createAuthGuard())
+installPageTitle(router)
 
 export default router

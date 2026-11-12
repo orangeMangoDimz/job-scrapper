@@ -98,3 +98,58 @@ describe('old page routes', () => {
     ])
   })
 })
+
+describe('HomePage tab title', () => {
+  beforeEach(() => {
+    document.title = 'Loading'
+    Element.prototype.scrollIntoView = vi.fn()
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 5000,
+      configurable: true,
+    })
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ top: 2000 } as DOMRect)
+  })
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+    vi.restoreAllMocks()
+  })
+
+  function placeSections(tops: Record<string, number>): void {
+    Object.entries(tops).forEach(([id, top]) => {
+      const element =
+        document.getElementById(id) ?? document.body.appendChild(document.createElement('section'))
+      element.id = id
+      element.getBoundingClientRect = () => ({ top }) as DOMRect
+    })
+  }
+
+  it('shows the first section label before anything is scrolled', async () => {
+    await mountHome('/')
+
+    expect(document.title).toBe('Runs')
+  })
+
+  it('follows a nav link even when the page cannot scroll', async () => {
+    const wrapper = await mountHome('/')
+
+    await wrapper.vm.$router.push('/#discord')
+    await flushPromises()
+
+    expect(document.title).toBe('Discord')
+  })
+
+  it('follows the section the user scrolls to using the nav labels', async () => {
+    await mountHome('/')
+    placeSections({ config: 120, discord: 900 })
+    window.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+    expect(document.title).toBe('Config')
+
+    placeSections({ config: -300, discord: 96 })
+    window.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+
+    expect(document.title).toBe('Discord')
+  })
+})
