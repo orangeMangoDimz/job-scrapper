@@ -2,7 +2,6 @@
 import { useTitle } from '@vueuse/core'
 import { computed, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import ConfigPage from '@/modules/config/presentation/pages/ConfigPage.vue'
 import { useConfigStore } from '@/modules/config/presentation/stores/useConfigStore'
 import DiscordPage from '@/modules/discord/presentation/pages/DiscordPage.vue'
 import { useDiscordSettingsStore } from '@/modules/discord/presentation/stores/useDiscordSettingsStore'
@@ -55,14 +54,6 @@ const stopScrollWatch = watch(isSettled, (settled) => {
       class="flex scroll-mt-24 flex-col gap-6"
     >
       <RunsPage />
-    </section>
-    <section
-      id="config"
-      aria-labelledby="config-heading"
-      data-slot="home-section"
-      class="flex scroll-mt-24 flex-col gap-6"
-    >
-      <ConfigPage />
     </section>
     <section
       id="discord"

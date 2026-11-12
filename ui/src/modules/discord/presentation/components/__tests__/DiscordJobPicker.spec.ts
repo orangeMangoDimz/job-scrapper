@@ -15,6 +15,10 @@ function makeRun(id: string, jobCount: number): RunRecord {
     jobCount,
     errorCount: 0,
     error: null,
+    discordStatus: null,
+    discordSent: 0,
+    discordFailed: 0,
+    discordError: null,
   }
 }
 

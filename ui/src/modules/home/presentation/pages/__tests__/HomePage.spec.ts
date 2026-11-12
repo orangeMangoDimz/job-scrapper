@@ -13,7 +13,6 @@ import { runRoutes } from '@/modules/runs/routes'
 
 const PAGE_STUBS = {
   RunsPage: { template: '<h2 id="runs-heading">Runs</h2>' },
-  ConfigPage: { template: '<h2 id="config-heading">Config</h2>' },
   DiscordPage: { template: '<h2 id="discord-heading">Discord</h2>' },
 }
 
@@ -52,18 +51,13 @@ describe('HomePage', () => {
     document.body.innerHTML = ''
   })
 
-  it('stacks Runs, Config and Discord as named sections in that order', async () => {
+  it('stacks Runs and Discord as named sections, with config living inside Runs', async () => {
     const wrapper = await mountHome('/')
 
     const sections = wrapper.findAll('[data-slot="home-section"]')
-    expect(sections.map((section) => section.attributes('id'))).toEqual([
-      'runs',
-      'config',
-      'discord',
-    ])
+    expect(sections.map((section) => section.attributes('id'))).toEqual(['runs', 'discord'])
     expect(sections.map((section) => section.attributes('aria-labelledby'))).toEqual([
       'runs-heading',
-      'config-heading',
       'discord-heading',
     ])
   })

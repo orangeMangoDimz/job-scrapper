@@ -13,7 +13,10 @@ const getRun = { execute: vi.fn() }
 const listRuns = { execute: vi.fn() }
 const startRun = { execute: vi.fn() }
 
-function record(status: RunRecord['status']): RunRecord {
+function record(
+  status: RunRecord['status'],
+  discordStatus: RunRecord['discordStatus'] = null,
+): RunRecord {
   return {
     id: 'run-1',
     status,
@@ -24,11 +27,18 @@ function record(status: RunRecord['status']): RunRecord {
     jobCount: 0,
     errorCount: 0,
     error: null,
+    discordStatus,
+    discordSent: 0,
+    discordFailed: 0,
+    discordError: null,
   }
 }
 
-function detail(status: RunRecord['status']): RunDetail {
-  return { record: record(status), jobs: [], failures: [], payloads: [] }
+function detail(
+  status: RunRecord['status'],
+  discordStatus: RunRecord['discordStatus'] = null,
+): RunDetail {
+  return { record: record(status, discordStatus), jobs: [], failures: [], payloads: [] }
 }
 
 describe('useRunStore', () => {
@@ -75,7 +85,7 @@ describe('useRunStore', () => {
       .mockResolvedValueOnce(detail('succeeded'))
     const store = useRunStore()
 
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
     expect(store.isRunning).toBe(true)
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
@@ -91,7 +101,7 @@ describe('useRunStore', () => {
     startRun.execute.mockRejectedValue(new Error('A scrape is already running.'))
     const store = useRunStore()
 
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
 
     expect(store.actionError).toBe('A scrape is already running.')
     expect(store.isRunning).toBe(false)
@@ -103,7 +113,7 @@ describe('useRunStore', () => {
       .mockRejectedValueOnce(new Error('timeout'))
       .mockResolvedValueOnce(detail('succeeded'))
     const store = useRunStore()
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
     expect(store.isRunning).toBe(true)
@@ -118,7 +128,7 @@ describe('useRunStore', () => {
     startRun.execute.mockResolvedValue(record('running'))
     getRun.execute.mockRejectedValue(new Error('timeout'))
     const store = useRunStore()
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * MAX_POLL_FAILURES)
 
@@ -139,7 +149,7 @@ describe('useRunStore', () => {
     }
     getRun.execute.mockResolvedValueOnce(detail('succeeded'))
     const store = useRunStore()
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
 
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * (MAX_POLL_FAILURES * 2))
 
@@ -151,7 +161,7 @@ describe('useRunStore', () => {
     listRuns.execute.mockRejectedValue(new Error('timeout'))
     const store = useRunStore()
 
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
 
     expect(store.isRunning).toBe(true)
     expect(store.actionError).toContain('history')
@@ -166,7 +176,7 @@ describe('useRunStore', () => {
       }),
     )
     const store = useRunStore()
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
 
     store.stopPolling()
@@ -181,11 +191,120 @@ describe('useRunStore', () => {
     startRun.execute.mockResolvedValue(record('running'))
     getRun.execute.mockResolvedValue(detail('running'))
     const store = useRunStore()
-    await store.start(['django'], ['upwork'])
+    await store.start(['django'], ['upwork'], false)
 
     store.stopPolling()
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3)
 
     expect(getRun.execute).not.toHaveBeenCalled()
+  })
+
+  describe('discord send', () => {
+    it('passes the notify flag to the run', async () => {
+      startRun.execute.mockResolvedValue(record('running'))
+      const store = useRunStore()
+
+      await store.start(['django'], ['upwork'], true)
+
+      expect(startRun.execute).toHaveBeenCalledWith(['django'], ['upwork'], true)
+    })
+
+    it('keeps polling and stays running while the run is sending', async () => {
+      startRun.execute.mockResolvedValue(record('running', 'sending'))
+      getRun.execute
+        .mockResolvedValueOnce(detail('succeeded', 'sending'))
+        .mockResolvedValueOnce(detail('succeeded', 'sending'))
+        .mockResolvedValueOnce(detail('succeeded', 'sent'))
+      const store = useRunStore()
+      await store.start(['django'], ['upwork'], true)
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+      expect(store.isRunning).toBe(true)
+      expect(store.selected?.record.status).toBe('succeeded')
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+      expect(store.isRunning).toBe(true)
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+      expect(store.isRunning).toBe(false)
+      expect(store.selected?.record.discordStatus).toBe('sent')
+      expect(getRun.execute).toHaveBeenCalledTimes(3)
+    })
+
+    it('refreshes the history once scraping ends and again when sending ends', async () => {
+      startRun.execute.mockResolvedValue(record('running', 'sending'))
+      getRun.execute
+        .mockResolvedValueOnce(detail('succeeded', 'sending'))
+        .mockResolvedValueOnce(detail('succeeded', 'sending'))
+        .mockResolvedValueOnce(detail('succeeded', 'sent'))
+      const store = useRunStore()
+      await store.start(['django'], ['upwork'], true)
+      listRuns.execute.mockClear()
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3)
+
+      expect(listRuns.execute).toHaveBeenCalledTimes(2)
+    })
+
+    it('follows a sending run found on load even though it is not running', async () => {
+      getOptions.execute.mockResolvedValue({ keywords: [], sites: [], isStale: false })
+      listRuns.execute.mockResolvedValue([record('succeeded', 'sending')])
+      getRun.execute.mockResolvedValue(detail('succeeded', 'sent'))
+      const store = useRunStore()
+
+      await store.load()
+      expect(store.isRunning).toBe(true)
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+      expect(store.isRunning).toBe(false)
+    })
+
+    it.each<[RunRecord['discordStatus']]>([['sent'], ['partial'], ['failed']])(
+      'reports the outcome when sending ends as %s',
+      async (final) => {
+        startRun.execute.mockResolvedValue(record('running', 'sending'))
+        getRun.execute
+          .mockResolvedValueOnce(detail('succeeded', 'sending'))
+          .mockResolvedValueOnce(detail('succeeded', final))
+        const store = useRunStore()
+        await store.start(['django'], ['upwork'], true)
+        expect(store.discordOutcome).toBeNull()
+
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2)
+
+        expect(store.discordOutcome?.discordStatus).toBe(final)
+      },
+    )
+
+    it('reports the outcome even when sending ends between two polls', async () => {
+      startRun.execute.mockResolvedValue(record('running', 'sending'))
+      getRun.execute.mockResolvedValueOnce(detail('succeeded', 'sent'))
+      const store = useRunStore()
+      await store.start(['django'], ['upwork'], true)
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+
+      expect(store.discordOutcome?.discordStatus).toBe('sent')
+    })
+
+    it('does not report an outcome for a run without a send', async () => {
+      startRun.execute.mockResolvedValue(record('running'))
+      getRun.execute.mockResolvedValueOnce(detail('succeeded'))
+      const store = useRunStore()
+      await store.start(['django'], ['upwork'], false)
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+
+      expect(store.discordOutcome).toBeNull()
+    })
+
+    it('does not report an outcome for a run that was only selected', async () => {
+      getRun.execute.mockResolvedValue(detail('succeeded', 'sent'))
+      const store = useRunStore()
+
+      await store.select('run-1')
+
+      expect(store.discordOutcome).toBeNull()
+    })
   })
 })

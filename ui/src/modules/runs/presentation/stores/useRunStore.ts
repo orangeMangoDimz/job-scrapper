@@ -11,19 +11,30 @@ const FALLBACK_ERROR_MESSAGE = 'Something went wrong. Try again.'
 const LOST_RUN_MESSAGE = 'Lost track of this run. Reload the page to check it.'
 const HISTORY_ERROR_MESSAGE = 'Could not refresh the run history.'
 
+function isBusy(record: RunRecord): boolean {
+  return record.status === 'running' || record.discordStatus === 'sending'
+}
+
 export const useRunStore = defineStore('runs', () => {
   const status = ref<LoadStatus>('idle')
   const options = ref<RunOptions | null>(null)
   const runs = ref<RunRecord[]>([])
   const selected = ref<RunDetail | null>(null)
   const activeRunId = ref<string | null>(null)
+  const discordOutcome = ref<RunRecord | null>(null)
   const errorMessage = ref<string | null>(null)
   const actionError = ref<string | null>(null)
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let pollGeneration = 0
   let pollFailures = 0
+  let historyRefreshedFor: string | null = null
+  const expectedDiscordIds = new Set<string>()
 
   const isRunning = computed(() => activeRunId.value !== null)
+
+  function expectDiscordOutcome(id: string): void {
+    expectedDiscordIds.add(id)
+  }
 
   async function refreshHistory(): Promise<void> {
     try {
@@ -41,6 +52,7 @@ export const useRunStore = defineStore('runs', () => {
   function followRun(id: string): void {
     activeRunId.value = id
     pollFailures = 0
+    historyRefreshedFor = null
     schedulePoll(id)
   }
 
@@ -66,8 +78,11 @@ export const useRunStore = defineStore('runs', () => {
       options.value = nextOptions
       runs.value = nextRuns
       status.value = 'ready'
-      const active = nextRuns.find((run) => run.status === 'running')
+      const active = nextRuns.find(isBusy)
       if (active !== undefined && activeRunId.value === null) {
+        if (active.discordStatus === 'sending') {
+          expectDiscordOutcome(active.id)
+        }
         followRun(active.id)
       }
     } catch (error) {
@@ -90,19 +105,45 @@ export const useRunStore = defineStore('runs', () => {
       return
     }
     pollFailures = 0
-    if (detail.record.status === 'running') {
+    if (detail.record.discordStatus === 'sending') {
+      expectDiscordOutcome(id)
+    }
+    const isScrapeEnd = detail.record.status !== 'running' && historyRefreshedFor !== id
+    const isSelectedRun = selected.value?.record.id === id
+    if (!isBusy(detail.record) || isScrapeEnd || isSelectedRun) {
+      selected.value = detail
+    }
+    if (isBusy(detail.record)) {
       schedulePoll(id)
+      await refreshHistoryOnce(id, detail.record)
       return
     }
-    selected.value = detail
     activeRunId.value = null
+    recordDiscordOutcome(detail.record)
     await refreshHistory()
   }
 
-  async function start(keywords: string[], sites: string[]): Promise<void> {
+  async function refreshHistoryOnce(id: string, record: RunRecord): Promise<void> {
+    if (record.status === 'running' || historyRefreshedFor === id) {
+      return
+    }
+    historyRefreshedFor = id
+    await refreshHistory()
+  }
+
+  function recordDiscordOutcome(record: RunRecord): void {
+    if (record.discordStatus !== null && expectedDiscordIds.delete(record.id)) {
+      discordOutcome.value = record
+    }
+  }
+
+  async function start(keywords: string[], sites: string[], notifyDiscord: boolean): Promise<void> {
     actionError.value = null
     try {
-      const record = await requireRunUseCases().startRun.execute(keywords, sites)
+      const record = await requireRunUseCases().startRun.execute(keywords, sites, notifyDiscord)
+      if (notifyDiscord) {
+        expectDiscordOutcome(record.id)
+      }
       followRun(record.id)
       await refreshHistory()
     } catch (error) {
@@ -134,6 +175,7 @@ export const useRunStore = defineStore('runs', () => {
     selected,
     errorMessage,
     actionError,
+    discordOutcome,
     isRunning,
     load,
     start,

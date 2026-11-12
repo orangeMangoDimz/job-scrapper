@@ -33,6 +33,10 @@ function makeDetail(overrides: Partial<RunDetail> = {}): RunDetail {
       jobCount: 1,
       errorCount: 0,
       error: null,
+      discordStatus: null,
+      discordSent: 0,
+      discordFailed: 0,
+      discordError: null,
     },
     jobs: [
       {
@@ -305,5 +309,40 @@ describe('RunResults', () => {
 
     expect(tab(wrapper, 'Raw JSON').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('pre').text()).toContain('raw-jobstreet-ai')
+  })
+
+  describe('discord status', () => {
+    function withDiscord(overrides: Partial<RunDetail['record']>): RunDetail {
+      const detail = makeDetail()
+      return { ...detail, record: { ...detail.record, ...overrides } }
+    }
+
+    it('shows nothing about Discord when there was no send', () => {
+      const wrapper = mountResults()
+
+      expect(wrapper.find('[data-slot="discord-status"]').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('Discord')
+    })
+
+    it.each<[Partial<RunDetail['record']>, string, string]>([
+      [{ discordStatus: 'sending' }, 'Sending to Discord', 'neutral'],
+      [{ discordStatus: 'sent', discordSent: 3 }, 'Sent 3 to Discord', 'accent'],
+      [
+        { discordStatus: 'partial', discordSent: 2, discordFailed: 1 },
+        'Sent 2, failed 1 on Discord',
+        'neutral',
+      ],
+      [
+        { discordStatus: 'failed', discordError: 'Missing access' },
+        'Discord failed: Missing access',
+        'danger',
+      ],
+    ])('shows the send status for %o', (overrides, label, tone) => {
+      const wrapper = mountResults(withDiscord(overrides))
+      const status = wrapper.get('[data-slot="discord-status"]')
+
+      expect(status.text()).toBe(label)
+      expect(status.attributes('data-tone')).toBe(tone)
+    })
   })
 })

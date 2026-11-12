@@ -1,5 +1,7 @@
 export type RunStatus = 'running' | 'succeeded' | 'partial' | 'failed' | 'interrupted'
 
+export type RunDiscordStatus = 'sending' | 'sent' | 'partial' | 'failed'
+
 export interface RunRecord {
   id: string
   status: RunStatus
@@ -10,6 +12,10 @@ export interface RunRecord {
   jobCount: number
   errorCount: number
   error: string | null
+  discordStatus: RunDiscordStatus | null
+  discordSent: number
+  discordFailed: number
+  discordError: string | null
 }
 
 export interface RunJob {

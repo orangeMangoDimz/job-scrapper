@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useId } from 'vue'
 import type { RunRecord } from '@/modules/runs/domain/entities/Run'
+import DiscordStatusText from '@/modules/runs/presentation/components/DiscordStatusText.vue'
 import { formatJobCount, RUN_STATUS_VIEWS } from '@/modules/runs/presentation/components/runStatus'
 import EmptyState from '@/shared/components/EmptyState.vue'
 import ShowMoreToggle from '@/shared/components/ShowMoreToggle.vue'
@@ -58,6 +59,7 @@ function formatStartedAt(value: string): string {
           <span class="text-body-sm text-ink-muted">
             {{ run.sites.join(', ') }} · {{ formatJobCount(run.jobCount) }}
           </span>
+          <DiscordStatusText :record="run" class="text-caption" />
           <span class="text-caption text-ink-muted">{{ formatStartedAt(run.startedAt) }}</span>
         </button>
       </li>

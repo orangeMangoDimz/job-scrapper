@@ -8,7 +8,7 @@ export class StartRunUseCase {
     this.repository = repository
   }
 
-  execute(keywords: string[], sites: string[]): Promise<RunRecord> {
-    return this.repository.startRun(keywords, sites)
+  execute(keywords: string[], sites: string[], notifyDiscord: boolean): Promise<RunRecord> {
+    return this.repository.startRun(keywords, sites, notifyDiscord)
   }
 }
